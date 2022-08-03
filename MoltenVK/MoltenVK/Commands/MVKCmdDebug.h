@@ -46,10 +46,6 @@ class MVKCmdDebugMarkerBegin : public MVKCmdDebugMarker {
 
 public:
 	void encode(MVKCommandEncoder* cmdEncoder) override;
-
-protected:
-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
-
 };
 
 
@@ -62,10 +58,6 @@ public:
 	VkResult setContent(MVKCommandBuffer* cmdBuff);
 
 	void encode(MVKCommandEncoder* cmdEncoder) override;
-
-protected:
-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
-
 };
 
 
@@ -76,10 +68,6 @@ class MVKCmdDebugMarkerInsert : public MVKCmdDebugMarker {
 
 public:
 	void encode(MVKCommandEncoder* cmdEncoder) override;
-
-protected:
-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
-
 };
 
 

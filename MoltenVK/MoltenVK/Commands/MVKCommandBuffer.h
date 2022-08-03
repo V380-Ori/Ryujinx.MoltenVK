@@ -176,6 +176,25 @@ public:
         return (MVKCommandBuffer*)getDispatchableObject(vkCommandBuffer);
     }
 
+    inline void *pushCommandMemory(size_t size) {
+        size = (uint32_t)mvkAlignByteCount(size, 8);
+
+        if (size + _commandChunkOffset > _commandChunkSize) {
+            _commandChunkIndex++;
+            _commandChunkOffset = 0;
+        }
+
+        if (_commandChunkIndex >= _commandChunks.size()) {
+            _commandChunks.push_back(new uint8_t[_commandChunkSize]);
+        }
+
+        auto result = _commandChunks[_commandChunkIndex] + _commandChunkOffset;
+        _commandChunkOffset += size;
+        return result;
+    }
+
+    MVKSmallVector<MVKCommand *> destroyList;
+
 protected:
 	friend class MVKCommandEncoder;
 	friend class MVKCommandPool;
@@ -184,7 +203,6 @@ protected:
 	void init(const VkCommandBufferAllocateInfo* pAllocateInfo);
 	bool canExecute();
 	void clearPrefilledMTLCommandBuffer();
-    void releaseCommands(MVKCommand* command);
 	void releaseRecordedCommands();
 	void flushImmediateCmdEncoder();
 	void checkDeferredEncoding();
@@ -196,6 +214,10 @@ protected:
 	MVKSmallVector<uint32_t, kMVKDefaultAttachmentCount> _secondaryInheritanceColorAttachmentLocations;
 	MVKSmallVector<uint32_t, kMVKDefaultAttachmentCount> _secondaryInheritanceColorAttachmentInputIndices;
 	MVKCommandPool* _commandPool;
+    uint32_t _commandChunkSize = 64 * KIBI;
+    uint32_t _commandChunkIndex = 0;
+    uint32_t _commandChunkOffset = 0;
+    MVKSmallVector<uint8_t *> _commandChunks;
 	VkCommandBufferInheritanceInfo _secondaryInheritanceInfo;
 	VkCommandBufferInheritanceRenderingInfo _secondaryInheritanceRenderingInfo;
 	VkRenderingAttachmentLocationInfo _secondaryInheritanceRenderingAttachmentLocationInfo;

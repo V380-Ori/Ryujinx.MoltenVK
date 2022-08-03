@@ -46,22 +46,22 @@ VkResult MVKCmdBeginRenderPassBase::setContent(MVKCommandBuffer* cmdBuff,
 #pragma mark -
 #pragma mark MVKCmdBeginRenderPass
 
-template <size_t N_CV, size_t N_A>
-VkResult MVKCmdBeginRenderPass<N_CV, N_A>::setContent(MVKCommandBuffer* cmdBuff,
+VkResult MVKCmdBeginRenderPass::setContent(MVKCommandBuffer* cmdBuff,
 													  const VkRenderPassBeginInfo* pRenderPassBegin,
 													  const VkSubpassBeginInfo* pSubpassBeginInfo,
 													  MVKArrayRef<MVKImageView*> attachments) {
 	MVKCmdBeginRenderPassBase::setContent(cmdBuff, pRenderPassBegin, pSubpassBeginInfo);
 
+	_attachments.alc.cmdBuffer = cmdBuff;
 	_attachments.assign(attachments.begin(), attachments.end());
+	_clearValues.alc.cmdBuffer = cmdBuff;
 	_clearValues.assign(pRenderPassBegin->pClearValues,
 						pRenderPassBegin->pClearValues + pRenderPassBegin->clearValueCount);
 
 	return VK_SUCCESS;
 }
 
-template <size_t N_CV, size_t N_A>
-void MVKCmdBeginRenderPass<N_CV, N_A>::encode(MVKCommandEncoder* cmdEncoder) {
+void MVKCmdBeginRenderPass::encode(MVKCommandEncoder* cmdEncoder) {
 	cmdEncoder->beginRenderpass(this,
 								_contents,
 								_renderPass,
@@ -71,22 +71,6 @@ void MVKCmdBeginRenderPass<N_CV, N_A>::encode(MVKCommandEncoder* cmdEncoder) {
 								_attachments.contents(),
 								kMVKCommandUseBeginRenderPass);
 }
-
-template class MVKCmdBeginRenderPass<1, 0>;
-template class MVKCmdBeginRenderPass<2, 0>;
-template class MVKCmdBeginRenderPass<9, 0>;
-
-template class MVKCmdBeginRenderPass<1, 1>;
-template class MVKCmdBeginRenderPass<2, 1>;
-template class MVKCmdBeginRenderPass<9, 1>;
-
-template class MVKCmdBeginRenderPass<1, 2>;
-template class MVKCmdBeginRenderPass<2, 2>;
-template class MVKCmdBeginRenderPass<9, 2>;
-
-template class MVKCmdBeginRenderPass<1, 9>;
-template class MVKCmdBeginRenderPass<2, 9>;
-template class MVKCmdBeginRenderPass<9, 9>;
 
 #pragma mark -
 #pragma mark MVKCmdNextSubpass
@@ -132,12 +116,12 @@ void MVKCmdEndRenderPass::encode(MVKCommandEncoder* cmdEncoder) {
 #pragma mark -
 #pragma mark MVKCmdBeginRendering
 
-template <size_t N>
-VkResult MVKCmdBeginRendering<N>::setContent(MVKCommandBuffer* cmdBuff,
+VkResult MVKCmdBeginRendering::setContent(MVKCommandBuffer* cmdBuff,
 											 const VkRenderingInfo* pRenderingInfo) {
 	_renderingInfo = *pRenderingInfo;
 
 	// Copy attachments content, redirect info pointers to copied content, and remove any stale pNext refs
+	_colorAttachments.alc.cmdBuffer = cmdBuff;
 	_colorAttachments.assign(_renderingInfo.pColorAttachments,
 							 _renderingInfo.pColorAttachments + _renderingInfo.colorAttachmentCount);
 	_renderingInfo.pColorAttachments = _colorAttachments.data();
@@ -155,15 +139,9 @@ VkResult MVKCmdBeginRendering<N>::setContent(MVKCommandBuffer* cmdBuff,
 	return VK_SUCCESS;
 }
 
-template <size_t N>
-void MVKCmdBeginRendering<N>::encode(MVKCommandEncoder* cmdEncoder) {
+void MVKCmdBeginRendering::encode(MVKCommandEncoder* cmdEncoder) {
 	cmdEncoder->beginRendering(this, &_renderingInfo);
 }
-
-template class MVKCmdBeginRendering<1>;
-template class MVKCmdBeginRendering<2>;
-template class MVKCmdBeginRendering<4>;
-template class MVKCmdBeginRendering<8>;
 
 
 #pragma mark -
@@ -233,7 +211,7 @@ void MVKCmdEndRendering::encode(MVKCommandEncoder* cmdEncoder) {
 
 VkResult MVKCmdSetSampleLocations::setContent(MVKCommandBuffer* cmdBuff,
 											  const VkSampleLocationsInfoEXT* pSampleLocationsInfo) {
-	_sampleLocations.clear();
+	_sampleLocations.alc.cmdBuffer = cmdBuff;
 	for (uint32_t slIdx = 0; slIdx < pSampleLocationsInfo->sampleLocationsCount; slIdx++) {
 		_sampleLocations.push_back(pSampleLocationsInfo->pSampleLocations[slIdx]);
 	}
@@ -264,13 +242,12 @@ void MVKCmdSetSampleLocationsEnable::encode(MVKCommandEncoder* cmdEncoder) {
 #pragma mark -
 #pragma mark MVKCmdSetViewport
 
-template <size_t N>
-VkResult MVKCmdSetViewport<N>::setContent(MVKCommandBuffer* cmdBuff,
+VkResult MVKCmdSetViewport::setContent(MVKCommandBuffer* cmdBuff,
 										  uint32_t firstViewport,
 										  uint32_t viewportCount,
 										  const VkViewport* pViewports) {
 	_firstViewport = firstViewport;
-	_viewports.clear();
+	_viewports.alc.cmdBuffer = cmdBuff;
 	_viewports.reserve(viewportCount);
 	for (uint32_t vpIdx = 0; vpIdx < viewportCount; vpIdx++) {
 		_viewports.push_back(pViewports[vpIdx]);
@@ -279,8 +256,7 @@ VkResult MVKCmdSetViewport<N>::setContent(MVKCommandBuffer* cmdBuff,
 	return VK_SUCCESS;
 }
 
-template <size_t N>
-void MVKCmdSetViewport<N>::encode(MVKCommandEncoder* cmdEncoder) {
+void MVKCmdSetViewport::encode(MVKCommandEncoder* cmdEncoder) {
 	uint32_t end = std::min(_firstViewport + static_cast<uint32_t>(_viewports.size()), kMVKMaxViewportScissorCount);
 	MVKVulkanGraphicsCommandEncoderState& state = cmdEncoder->getState().updateDynamicState(MVKRenderStateFlag::Viewports);
 	state._renderState.numViewports = std::max(static_cast<uint8_t>(end), cmdEncoder->getVkGraphics()._renderState.numViewports);
@@ -288,20 +264,16 @@ void MVKCmdSetViewport<N>::encode(MVKCommandEncoder* cmdEncoder) {
 		state._viewports[i] = _viewports[i - _firstViewport];
 }
 
-template class MVKCmdSetViewport<1>;
-template class MVKCmdSetViewport<kMVKMaxViewportScissorCount>;
-
 
 #pragma mark -
 #pragma mark MVKCmdSetScissor
 
-template <size_t N>
-VkResult MVKCmdSetScissor<N>::setContent(MVKCommandBuffer* cmdBuff,
+VkResult MVKCmdSetScissor::setContent(MVKCommandBuffer* cmdBuff,
 										 uint32_t firstScissor,
 										 uint32_t scissorCount,
 										 const VkRect2D* pScissors) {
 	_firstScissor = firstScissor;
-	_scissors.clear();
+	_scissors.alc.cmdBuffer = cmdBuff;
 	_scissors.reserve(scissorCount);
 	for (uint32_t sIdx = 0; sIdx < scissorCount; sIdx++) {
 		_scissors.push_back(pScissors[sIdx]);
@@ -310,17 +282,13 @@ VkResult MVKCmdSetScissor<N>::setContent(MVKCommandBuffer* cmdBuff,
 	return VK_SUCCESS;
 }
 
-template <size_t N>
-void MVKCmdSetScissor<N>::encode(MVKCommandEncoder* cmdEncoder) {
+void MVKCmdSetScissor::encode(MVKCommandEncoder* cmdEncoder) {
 	uint32_t end = std::min(_firstScissor + static_cast<uint32_t>(_scissors.size()), kMVKMaxViewportScissorCount);
 	MVKVulkanGraphicsCommandEncoderState& state = cmdEncoder->getState().updateDynamicState(MVKRenderStateFlag::Scissors);
 	state._renderState.numScissors = std::max(static_cast<uint8_t>(end), cmdEncoder->getVkGraphics()._renderState.numScissors);
 	for (uint32_t i = _firstScissor; i < end; i++)
 		state._scissors[i] = _scissors[i - _firstScissor];
 }
-
-template class MVKCmdSetScissor<1>;
-template class MVKCmdSetScissor<kMVKMaxViewportScissorCount>;
 
 
 #pragma mark -

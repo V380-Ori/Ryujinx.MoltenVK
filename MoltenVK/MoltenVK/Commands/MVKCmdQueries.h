@@ -55,8 +55,6 @@ public:
     void encode(MVKCommandEncoder* cmdEncoder) override;
 
 protected:
-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
-
     VkQueryControlFlags _flags;
 };
 
@@ -68,10 +66,6 @@ class MVKCmdEndQuery : public MVKCmdQuery {
 
 public:
     void encode(MVKCommandEncoder* cmdEncoder) override;
-
-protected:
-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
-
 };
 
 
@@ -89,8 +83,6 @@ public:
     void encode(MVKCommandEncoder* cmdEncoder) override;
 
 protected:
-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
-
 	VkPipelineStageFlags2 _stage;
 };
 
@@ -109,8 +101,6 @@ public:
     void encode(MVKCommandEncoder* cmdEncoder) override;
 
 protected:
-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
-
     uint32_t _queryCount;
 };
 
@@ -133,8 +123,6 @@ public:
     void encode(MVKCommandEncoder* cmdEncoder) override;
 
 protected:
-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
-
     MVKBuffer* _destBuffer;
     VkDeviceSize _destOffset;
     VkDeviceSize _destStride;

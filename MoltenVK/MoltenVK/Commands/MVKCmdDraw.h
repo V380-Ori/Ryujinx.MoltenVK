@@ -30,9 +30,7 @@
 
 /**
  * Vulkan command to bind buffers containing vertex content.
- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
  */
-template <size_t N>
 class MVKCmdBindVertexBuffers : public MVKCommand {
 
 public:
@@ -47,16 +45,9 @@ public:
     void encode(MVKCommandEncoder* cmdEncoder) override;
 
 protected:
-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
-
 	uint32_t _firstBinding;
-    MVKSmallVector<MVKVertexMTLBufferBinding, N> _bindings;
+    MVKCommandVector<MVKVertexMTLBufferBinding> _bindings;
 };
-
-// Concrete template class implementations.
-typedef MVKCmdBindVertexBuffers<1> MVKCmdBindVertexBuffers1;
-typedef MVKCmdBindVertexBuffers<2> MVKCmdBindVertexBuffers2;
-typedef MVKCmdBindVertexBuffers<8> MVKCmdBindVertexBuffersMulti;
 
 
 #pragma mark -
@@ -79,8 +70,6 @@ public:
 	void encode(MVKCommandEncoder* cmdEncoder) override;
 
 protected:
-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
-
     MVKIndexMTLBufferBinding _binding;
 };
 
@@ -101,8 +90,6 @@ public:
 	void encodeIndexedIndirect(MVKCommandEncoder* cmdEncoder);
 
 protected:
-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
-
 	uint32_t _firstVertex;
 	uint32_t _vertexCount;
 	uint32_t _firstInstance;
@@ -126,7 +113,6 @@ public:
 	void encode(MVKCommandEncoder* cmdEncoder) override;
 
 protected:
-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
 	void encodeIndexedIndirect(MVKCommandEncoder* cmdEncoder);
 
 	uint32_t _firstIndex;
@@ -152,7 +138,6 @@ public:
 	void encode(MVKCommandEncoder* cmdEncoder) override;
 
 protected:
-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
 	void encodeIndexedIndirect(MVKCommandEncoder* cmdEncoder);
 
 	id<MTLBuffer> _mtlIndirectBuffer;
@@ -185,8 +170,6 @@ public:
 	void encode(MVKCommandEncoder* cmdEncoder, const MVKIndexMTLBufferBinding& ibbOrig);
 
 protected:
-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
-
 	id<MTLBuffer> _mtlIndirectBuffer;
 	VkDeviceSize _mtlIndirectBufferOffset;
 	uint32_t _mtlIndirectBufferStride;
