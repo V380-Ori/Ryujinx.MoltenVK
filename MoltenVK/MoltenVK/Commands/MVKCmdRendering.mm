@@ -27,30 +27,18 @@
 
 
 #pragma mark -
-#pragma mark MVKCmdBeginRenderPassBase
-
-VkResult MVKCmdBeginRenderPassBase::setContent(MVKCommandBuffer* cmdBuff,
-											   const VkRenderPassBeginInfo* pRenderPassBegin,
-											   const VkSubpassBeginInfo* pSubpassBeginInfo) {
-	_contents = pSubpassBeginInfo->contents;
-	_renderPass = (MVKRenderPass*)pRenderPassBegin->renderPass;
-	_framebuffer = (MVKFramebuffer*)pRenderPassBegin->framebuffer;
-	_renderArea = pRenderPassBegin->renderArea;
-
-	cmdBuff->_currentSubpassInfo.beginRenderpass(_renderPass);
-
-	return VK_SUCCESS;
-}
-
-
-#pragma mark -
 #pragma mark MVKCmdBeginRenderPass
 
 VkResult MVKCmdBeginRenderPass::setContent(MVKCommandBuffer* cmdBuff,
 													  const VkRenderPassBeginInfo* pRenderPassBegin,
 													  const VkSubpassBeginInfo* pSubpassBeginInfo,
 													  MVKArrayRef<MVKImageView*> attachments) {
-	MVKCmdBeginRenderPassBase::setContent(cmdBuff, pRenderPassBegin, pSubpassBeginInfo);
+	_contents = pSubpassBeginInfo->contents;
+	_renderPass = (MVKRenderPass*)pRenderPassBegin->renderPass;
+	_framebuffer = (MVKFramebuffer*)pRenderPassBegin->framebuffer;
+	_renderArea = pRenderPassBegin->renderArea;
+
+	cmdBuff->_currentSubpassInfo.beginRenderpass(_renderPass);
 
 	_attachments.alc.cmdBuffer = cmdBuff;
 	_attachments.assign(attachments.begin(), attachments.end());
