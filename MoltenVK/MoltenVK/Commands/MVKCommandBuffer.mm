@@ -175,12 +175,13 @@ void MVKCommandBuffer::beginSecondaryEncoding(MVKCommandEncoder* cmdEncoder) {
 }
 
 void MVKCommandBuffer::releaseRecordedCommands() {
-    for (auto cmd: destroyList) cmd->~MVKCommand();
-    destroyList.clear();
+	for (auto cmd: _destroyList) cmd->~MVKCommand();
+	_destroyList.clear();
+
 	_head = nullptr;
 	_tail = nullptr;
-    _commandChunkIndex = 0;
-    _commandChunkOffset = 0;
+	_commandChunkIndex = 0;
+	_commandChunkOffset = 0;
 }
 
 void MVKCommandBuffer::flushImmediateCmdEncoder() {

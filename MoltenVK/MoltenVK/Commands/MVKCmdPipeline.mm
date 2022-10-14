@@ -267,7 +267,7 @@ VkResult MVKCmdBindDescriptorSetsStatic::setContent(MVKCommandBuffer* cmdBuff,
 		_descriptorSets.push_back((MVKDescriptorSet*)pDescriptorSets[dsIdx]);
 	}
 
-	if (_pipelineLayout) cmdBuff->destroyList.push_back(this);
+	if (_pipelineLayout) cmdBuff->destroyOnReset(this);
 
 	return VK_SUCCESS;
 }
@@ -396,7 +396,7 @@ VkResult MVKCmdPushDescriptorSet::setContent(MVKCommandBuffer* cmdBuff,
 		}
 	}
 
-	cmdBuff->destroyList.push_back(this);
+	cmdBuff->destroyOnReset(this);
 
 	return VK_SUCCESS;
 }
@@ -457,7 +457,7 @@ VkResult MVKCmdPushDescriptorSetWithTemplate::setContent(MVKCommandBuffer* cmdBu
 		mvkCopy(_pData, pData, _dataSize);
 	}
 
-	cmdBuff->destroyList.push_back(this);
+	cmdBuff->destroyOnReset(this);
 
 	return VK_SUCCESS;
 }
