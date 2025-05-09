@@ -366,6 +366,9 @@ typedef struct {
 	VkBool32 needsCubeGradWorkaround;				/**< If true, sampling from cube textures with explicit gradients is broken and needs a workaround. */
 	VkBool32 nativeTextureAtomics;                  /**< If true, atomic operations on textures are supported natively. */
 	VkBool32 needsArgumentBufferEncoders;			/**< If true, Metal argument buffer encoders are needed to populate argument buffer content. */
+    VkBool32 subgroupUniformControlFlow;            /**< If true, subgroup invocations will reconverge if they were uniform upon entry to a block and exit via the corresponding merge block. */
+    VkBool32 maximalReconvergence;                  /**< If true, shader invocations that diverge will reconverge as soon as possible. */
+    VkBool32 quadControlFlow;                       /**< If true, derivatives are calculated on a per-quad basis, and full quads are spawned for fragment shaders using helper invocations. */
 } MVKPhysicalDeviceMetalFeatures;
 
 
