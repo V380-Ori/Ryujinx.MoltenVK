@@ -269,7 +269,7 @@ void MVKPhysicalDevice::getFeatures(VkPhysicalDeviceFeatures2* features) {
 		.shaderFloatControls2 = false,
 		.shaderExpectAssume = true,
 		.rectangularLines = false,
-		.bresenhamLines = false,
+		.bresenhamLines = true,
 		.smoothLines = false,
 		.stippledRectangularLines = false,
 		.stippledBresenhamLines = false,
@@ -401,6 +401,16 @@ void MVKPhysicalDevice::getFeatures(VkPhysicalDeviceFeatures2* features) {
 				auto* inlineUniformBlockFeatures = (VkPhysicalDeviceInlineUniformBlockFeatures*)next;
 				inlineUniformBlockFeatures->inlineUniformBlock = supportedFeats13.inlineUniformBlock;
 				inlineUniformBlockFeatures->descriptorBindingInlineUniformBlockUpdateAfterBind = supportedFeats13.descriptorBindingInlineUniformBlockUpdateAfterBind;
+				break;
+			}
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES: {
+				auto* lineRasterizationFeatures = (VkPhysicalDeviceLineRasterizationFeatures*)next;
+				lineRasterizationFeatures->rectangularLines = supportedFeats14.rectangularLines;
+				lineRasterizationFeatures->bresenhamLines = supportedFeats14.bresenhamLines;
+				lineRasterizationFeatures->smoothLines = supportedFeats14.smoothLines;
+				lineRasterizationFeatures->stippledRectangularLines = supportedFeats14.stippledRectangularLines;
+				lineRasterizationFeatures->stippledBresenhamLines = supportedFeats14.stippledBresenhamLines;
+				lineRasterizationFeatures->stippledSmoothLines = supportedFeats14.stippledSmoothLines;
 				break;
 			}
 			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES: {
@@ -669,7 +679,7 @@ void MVKPhysicalDevice::getFeatures(VkPhysicalDeviceFeatures2* features) {
 				extDynState3->extendedDynamicState3SampleLocationsEnable = true;
 				extDynState3->extendedDynamicState3ColorBlendAdvanced = false;
 				extDynState3->extendedDynamicState3ProvokingVertexMode = false;
-				extDynState3->extendedDynamicState3LineRasterizationMode = false;
+				extDynState3->extendedDynamicState3LineRasterizationMode = true;
 				extDynState3->extendedDynamicState3LineStippleEnable = false;
 				extDynState3->extendedDynamicState3DepthClipNegativeOneToOne = false;
 				extDynState3->extendedDynamicState3ViewportWScalingEnable = false;
@@ -886,7 +896,7 @@ void MVKPhysicalDevice::getProperties(VkPhysicalDeviceProperties2* properties) {
 	VkPhysicalDeviceVulkan14Properties supportedProps14;
 	supportedProps14.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_PROPERTIES;
 	supportedProps14.pNext = nullptr;
-	supportedProps14.lineSubPixelPrecisionBits = 0;
+	supportedProps14.lineSubPixelPrecisionBits = 4;
 	supportedProps14.maxVertexAttribDivisor = kMVKUndefinedLargeUInt32;
 	supportedProps14.supportsNonZeroFirstInstance = true;
 	supportedProps14.maxPushDescriptors = _properties.limits.maxPerStageResources;
@@ -1081,6 +1091,11 @@ void MVKPhysicalDevice::getProperties(VkPhysicalDeviceProperties2* properties) {
 				inlineUniformBlockProps->maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks = supportedProps13.maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks;
 				inlineUniformBlockProps->maxDescriptorSetInlineUniformBlocks = supportedProps13.maxDescriptorSetInlineUniformBlocks;
 				inlineUniformBlockProps->maxDescriptorSetUpdateAfterBindInlineUniformBlocks = supportedProps13.maxDescriptorSetUpdateAfterBindInlineUniformBlocks;
+				break;
+			}
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_PROPERTIES: {
+				auto* lineRasterizationProps = (VkPhysicalDeviceLineRasterizationProperties*)next;
+				lineRasterizationProps->lineSubPixelPrecisionBits = supportedProps14.lineSubPixelPrecisionBits;
 				break;
 			}
 			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES: {

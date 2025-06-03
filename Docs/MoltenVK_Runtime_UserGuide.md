@@ -257,6 +257,7 @@ In addition to core *Vulkan* functionality, **MoltenVK**  also supports the foll
   - *Requires `MVK_CONFIG_USE_MTLHEAP` to be active.*
 - `VK_KHR_image_format_list`
 - `VK_KHR_incremental_present`
+- `VK_KHR_line_rasterization`
 - `VK_KHR_load_store_op_none`
 - `VK_KHR_maintenance1`
 - `VK_KHR_maintenance2`
@@ -338,6 +339,7 @@ In addition to core *Vulkan* functionality, **MoltenVK**  also supports the foll
 - `VK_EXT_image_robustness`
 - `VK_EXT_inline_uniform_block`
 - `VK_EXT_layer_settings`
+- `VK_EXT_line_rasterization`
 - `VK_EXT_load_store_op_none`
 - `VK_EXT_memory_budget`
   - *Requires Metal 2.0.*
