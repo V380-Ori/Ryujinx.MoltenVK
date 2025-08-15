@@ -85,7 +85,6 @@ id<MTLTexture> MVKImagePlane::getMTLTexture() {
         }
 
         [mtlTexDesc release];                                            // temp release
-
         propagateDebugName();
     }
     return _mtlTexture;
