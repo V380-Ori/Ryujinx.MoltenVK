@@ -501,7 +501,6 @@ protected:
 	VkPhysicalDeviceTexelBufferAlignmentProperties _texelBuffAlignProperties;
 	VkPhysicalDeviceMemoryProperties _memoryProperties;
 	MVKSmallVector<MVKQueueFamily*, kMVKQueueFamilyCount> _queueFamilies;
-	VkExternalMemoryProperties _hostPointerExternalMemoryProperties;
 	VkExternalMemoryProperties _mtlBufferExternalMemoryProperties;
 	VkExternalMemoryProperties _mtlTextureExternalMemoryProperties;
 	id<MTLCounterSet> _timestampMTLCounterSet;
@@ -692,11 +691,6 @@ public:
 
 	/** Populates the device group peer memory features. */
 	void getPeerMemoryFeatures(uint32_t heapIndex, uint32_t localDevice, uint32_t remoteDevice, VkPeerMemoryFeatureFlags* pPeerMemoryFeatures);
-
-	/** Returns the properties of the host memory pointer. */
-	VkResult getMemoryHostPointerProperties(VkExternalMemoryHandleTypeFlagBits handleType,
-											const void* pHostPointer,
-											VkMemoryHostPointerPropertiesEXT* pMemHostPtrProps);
 
 	/** Samples timestamps from the specified domains and returns the sampled values. */
 	void getCalibratedTimestamps(uint32_t timestampCount,

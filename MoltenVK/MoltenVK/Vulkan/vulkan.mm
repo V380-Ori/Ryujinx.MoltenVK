@@ -4183,23 +4183,6 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdSetTessellationDomainOriginEXT(
 
 
 #pragma mark -
-#pragma mark VK_EXT_external_memory_host extension
-
-MVK_PUBLIC_VULKAN_SYMBOL VkResult vkGetMemoryHostPointerPropertiesEXT(
-	VkDevice                                    device,
-	VkExternalMemoryHandleTypeFlagBits          handleType,
-	const void*                                 pHostPointer,
-	VkMemoryHostPointerPropertiesEXT*           pMemoryHostPointerProperties) {
-
-	MVKTraceVulkanCallStart();
-	MVKDevice* mvkDvc = MVKDevice::getMVKDevice(device);
-	VkResult rslt = mvkDvc->getMemoryHostPointerProperties(handleType, pHostPointer, pMemoryHostPointerProperties);
-	MVKTraceVulkanCallEnd();
-	return rslt;
-}
-
-
-#pragma mark -
 #pragma mark VK_EXT_hdr_metadata extension
 
 MVK_PUBLIC_VULKAN_SYMBOL void vkSetHdrMetadataEXT(

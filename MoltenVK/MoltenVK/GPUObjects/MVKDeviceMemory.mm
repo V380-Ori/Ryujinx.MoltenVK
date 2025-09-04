@@ -195,9 +195,6 @@ bool MVKDeviceMemory::ensureMTLHeap() {
 
 	if (_mtlHeap) { return true; }
 
-	// Can't create a MTLHeap on imported memory
-	if (_isHostMemImported) { return true; }
-
 	// Don't bother if we don't have placement heaps.
 	if (!getMetalFeatures().placementHeaps) { return true; }
 
@@ -253,12 +250,7 @@ bool MVKDeviceMemory::ensureMTLBuffer() {
 		}
 		[buf makeAliasable];
 	} else if (_pHostMemory) {
-		auto rezOpts = getMTLResourceOptions();
-		if (_isHostMemImported) {
-			buf = [getMTLDevice() newBufferWithBytesNoCopy: _pHostMemory length: memLen options: rezOpts deallocator: nil];	// retained
-		} else {
-			buf = [getMTLDevice() newBufferWithBytes: _pHostMemory length: memLen options: rezOpts];     // retained
-		}
+		_mtlBuffer = [getMTLDevice() newBufferWithBytes: _pHostMemory length: memLen options: getMTLResourceOptions()];     // retained
 		freeHostMemory();
 	} else {
 		buf = [getMTLDevice() newBufferWithLength: memLen options: getMTLResourceOptions()];     // retained
@@ -291,7 +283,7 @@ bool MVKDeviceMemory::ensureHostMemory() {
 }
 
 void MVKDeviceMemory::freeHostMemory() {
-	if ( !_isHostMemImported ) { free(_pHostMemory); }
+	free(_pHostMemory);
 	_pHostMemory = nullptr;
 }
 
@@ -322,23 +314,6 @@ MVKDeviceMemory::MVKDeviceMemory(MVKDevice* device,
 				dedicatedImage = pDedicatedInfo->image;
 				dedicatedBuffer = pDedicatedInfo->buffer;
 				_isDedicated = dedicatedImage || dedicatedBuffer;
-				break;
-			}
-			case VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT: {
-				auto* pMemHostPtrInfo = (VkImportMemoryHostPointerInfoEXT*)next;
-				if (mvkIsAnyFlagEnabled(_vkMemPropFlags, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
-					switch (pMemHostPtrInfo->handleType) {
-						case VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT:
-						case VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT:
-							_pHostMemory = pMemHostPtrInfo->pHostPointer;
-							_isHostMemImported = true;
-							break;
-						default:
-							break;
-					}
-				} else {
-					setConfigurationResult(reportError(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR, "vkAllocateMemory(): Imported memory must be host-visible."));
-				}
 				break;
 			}
 			case VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO: {
@@ -415,7 +390,7 @@ MVKDeviceMemory::MVKDeviceMemory(MVKDevice* device,
 	// If memory needs to be coherent it must reside in a MTLBuffer, since an open-ended map() must work.
 	// If memory was imported, a MTLBuffer must be created on it.
 	// Or if a MTLBuffer will be exported, ensure it exists.
-	if ((isMemoryHostCoherent() || _isHostMemImported || willExportMTLBuffer) && !ensureMTLBuffer() ) {
+	if ((isMemoryHostCoherent() || willExportMTLBuffer) && !ensureMTLBuffer() ) {
 		setConfigurationResult(reportError(VK_ERROR_OUT_OF_DEVICE_MEMORY, "vkAllocateMemory(): Could not allocate a host-coherent or exportable VkDeviceMemory of size %llu bytes. The maximum memory-aligned size of a host-coherent VkDeviceMemory is %llu bytes.", _allocationSize, getMetalFeatures().maxMTLBufferSize));
 	}
 }

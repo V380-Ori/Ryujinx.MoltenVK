@@ -180,7 +180,6 @@ protected:
 	MTLStorageMode _mtlStorageMode;
 	MTLCPUCacheMode _mtlCPUCacheMode;
 	bool _isDedicated = false;
-	bool _isHostMemImported = false;
 
 };
 
