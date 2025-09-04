@@ -346,10 +346,10 @@ void mvkSetConfig(MVKConfiguration& dstMVKConfig, const MVKConfiguration& srcMVK
 
 /**
  * Maximize the concurrent executing compilation tasks.
- * This functionality requires macOS 13.3. Disabled by default.
+ * This functionality requires macOS 13.3. Enabled by default.
  */
 #ifndef MVK_CONFIG_SHOULD_MAXIMIZE_CONCURRENT_COMPILATION
-#  	define MVK_CONFIG_SHOULD_MAXIMIZE_CONCURRENT_COMPILATION    0
+#  	define MVK_CONFIG_SHOULD_MAXIMIZE_CONCURRENT_COMPILATION    1
 #endif
 
 /**
