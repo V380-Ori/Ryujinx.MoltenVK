@@ -499,7 +499,14 @@ VkResult MVKQueueCommandBufferSubmission::execute() {
 // Returns the active MTLCommandBuffer, lazily retrieving it from the queue if needed.
 id<MTLCommandBuffer> MVKQueueCommandBufferSubmission::getActiveMTLCommandBuffer() {
 	if ( !_activeMTLCommandBuffer ) {
-		setActiveMTLCommandBuffer(_queue->getMTLCommandBuffer(_commandUse));
+		bool needsRetain = false;
+		if (getEnabledDescriptorIndexingFeatures().descriptorBindingPartiallyBound || getMVKConfig().liveCheckAllResources) {
+			// Partially bound descriptors will get bound by us even if they're not used at runtime by the shader.
+			// The application is free to destroy them even if they're not used at runtime even if we bound them.
+			// Metal will be very unhappy if we destroy something we bound, even if it isn't used at runtime.
+			needsRetain = true;
+		}
+		setActiveMTLCommandBuffer(_queue->getMTLCommandBuffer(_commandUse, needsRetain));
 	}
 	return _activeMTLCommandBuffer;
 }
@@ -535,7 +542,8 @@ VkResult MVKQueueCommandBufferSubmission::commitActiveMTLCommandBuffer(bool sign
 	// finishes executing, and therefore cannot be used beyond the active MTLCommandBuffer.
 	// By now, it's been submitted to the MTLCommandBuffer, so remove it from the encoding context,
 	// to ensure a fresh one will be used by commands executing on any subsequent MTLCommandBuffers.
-	_encodingContext.visibilityResultBuffer = nullptr;
+	if (_encodingContext.visibilityResultBuffer.buffer())
+		_device->returnVisibilityBuffer(std::move(_encodingContext.visibilityResultBuffer));
 
 	// If we need to signal completion, use getActiveMTLCommandBuffer() to ensure at least
 	// one MTLCommandBuffer is used, otherwise if this instance has no content, it will not
