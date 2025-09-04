@@ -86,12 +86,12 @@ struct MVKResourceBinder {
 struct MVKVertexBufferBinder {
 	SEL _setBuffer;
 	SEL _setOffset;
-#if MVK_XCODE_15
+#if MVK_XCODE_15 && !MVK_USE_MSL_2_4
 	SEL _setBufferDynamic;
 	SEL _setOffsetDynamic;
 #endif
 	template <typename T> static MVKVertexBufferBinder Create() {
-#if MVK_XCODE_15
+#if MVK_XCODE_15 && !MVK_USE_MSL_2_4
 		return { T::selSetBuffer(), T::selSetOffset(), T::selSetBufferDynamic(), T::selSetOffsetDynamic() };
 #else
 		return { T::selSetBuffer(), T::selSetOffset() };
@@ -104,14 +104,14 @@ struct MVKVertexBufferBinder {
 		reinterpret_cast<void(*)(id, SEL, NSUInteger, NSUInteger)>(objc_msgSend)(encoder, _setOffset, offset, index);
 	}
 	void setBufferDynamic(id<MTLCommandEncoder> encoder, id<MTLBuffer> buffer, NSUInteger offset, NSUInteger stride, NSUInteger index) const {
-#if MVK_XCODE_15
+#if MVK_XCODE_15 && !MVK_USE_MSL_2_4
 		reinterpret_cast<void(*)(id, SEL, id<MTLBuffer>, NSUInteger, NSUInteger, NSUInteger)>(objc_msgSend)(encoder, _setBufferDynamic, buffer, offset, stride, index);
 #else
 		assert(0);
 #endif
 	}
 	void setBufferOffsetDynamic(id<MTLCommandEncoder> encoder, NSUInteger offset, NSUInteger stride, NSUInteger index) const {
-#if MVK_XCODE_15
+#if MVK_XCODE_15 && !MVK_USE_MSL_2_4
 		reinterpret_cast<void(*)(id, SEL, NSUInteger, NSUInteger, NSUInteger)>(objc_msgSend)(encoder, _setOffsetDynamic, offset, stride, index);
 #else
 		assert(0);

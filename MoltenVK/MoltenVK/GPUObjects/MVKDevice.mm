@@ -2375,7 +2375,7 @@ void MVKPhysicalDevice::initMetalFeatures() {
 
 	_metalFeatures.vertexStrideAlignment = supportsMTLGPUFamily(Apple5) ? 1 : 4;
 
-#if MVK_XCODE_15
+#if MVK_XCODE_15 && !MVK_USE_MSL_2_4
 	// Dynamic vertex stride needs to have everything aligned - compiled with support for vertex stride calls, and supported by both runtime OS and GPU.
 	_metalFeatures.dynamicVertexStride = mvkOSVersionIsAtLeast(14.0, 17.0, 1.0) && (supportsMTLGPUFamily(Apple4) || supportsMTLGPUFamily(Mac2));
 
@@ -2473,25 +2473,25 @@ void MVKPhysicalDevice::initMetalFeatures() {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion2_4;
 	}
 #endif
-#if MVK_XCODE_14
+#if MVK_XCODE_14 && !MVK_USE_MSL_2_4
 	if ( mvkOSVersionIsAtLeast(16.0) ) {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion3_0;
 	}
 #endif
 
-#if MVK_XCODE_15
+#if MVK_XCODE_15 && !MVK_USE_MSL_2_4
 	if ( mvkOSVersionIsAtLeast(17.0) ) {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion3_1;
 	}
 #endif
 
-#if MVK_XCODE_16
+#if MVK_XCODE_16 && !MVK_USE_MSL_2_4
 	if ( mvkOSVersionIsAtLeast(18.0) ) {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion3_2;
 	}
 #endif
 
-#if MVK_XCODE_26
+#if MVK_XCODE_26 && !MVK_USE_MSL_2_4
 	if ( mvkOSVersionIsAtLeast(26.0) ) {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion4_0;
 	}
@@ -2596,22 +2596,22 @@ void MVKPhysicalDevice::initMetalFeatures() {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion2_4;
 	}
 #endif
-#if MVK_XCODE_14
+#if MVK_XCODE_14 && !MVK_USE_MSL_2_4
 	if ( mvkOSVersionIsAtLeast(16.0) ) {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion3_0;
 	}
 #endif
-#if MVK_XCODE_15
+#if MVK_XCODE_15 && !MVK_USE_MSL_2_4
 	if ( mvkOSVersionIsAtLeast(17.0) ) {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion3_1;
 	}
 #endif
-#if MVK_XCODE_16
+#if MVK_XCODE_16 && !MVK_USE_MSL_2_4
 	if ( mvkOSVersionIsAtLeast(18.0) ) {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion3_2;
 	}
 #endif
-#if MVK_XCODE_26
+#if MVK_XCODE_26 && !MVK_USE_MSL_2_4
 	if ( mvkOSVersionIsAtLeast(26.0) ) {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion4_0;
 	}
@@ -2688,22 +2688,22 @@ void MVKPhysicalDevice::initMetalFeatures() {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion2_4;
 	}
 #endif
-#if MVK_XCODE_14
+#if MVK_XCODE_14 && !MVK_USE_MSL_2_4
 	if ( mvkOSVersionIsAtLeast(13.0) ) {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion3_0;
 	}
 #endif
-#if MVK_XCODE_15
+#if MVK_XCODE_15 && !MVK_USE_MSL_2_4
 	if ( mvkOSVersionIsAtLeast(14.0) ) {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion3_1;
 	}
 #endif
-#if MVK_XCODE_16
+#if MVK_XCODE_16 && !MVK_USE_MSL_2_4
 	if ( mvkOSVersionIsAtLeast(15.0) ) {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion3_2;
 	}
 #endif
-#if MVK_XCODE_26
+#if MVK_XCODE_26 && !MVK_USE_MSL_2_4
         if ( mvkOSVersionIsAtLeast(26.0) ) {
                 _metalFeatures.mslVersionEnum = MTLLanguageVersion4_0;
         }
@@ -2809,22 +2809,22 @@ void MVKPhysicalDevice::initMetalFeatures() {
 	_metalFeatures.mslVersion = SPIRV_CROSS_NAMESPACE::CompilerMSL::Options::make_msl_version(maj, min);
 
 	switch (_metalFeatures.mslVersionEnum) {
-#if MVK_XCODE_26
+#if MVK_XCODE_26 && !MVK_USE_MSL_2_4
 		case MTLLanguageVersion4_0:
 			setMSLVersion(4, 0);
 			break;
 #endif
-#if MVK_XCODE_16
+#if MVK_XCODE_16 && !MVK_USE_MSL_2_4
 		case MTLLanguageVersion3_2:
 			setMSLVersion(3, 2);
 			break;
 #endif
-#if MVK_XCODE_15
+#if MVK_XCODE_15 && !MVK_USE_MSL_2_4
 		case MTLLanguageVersion3_1:
 			setMSLVersion(3, 1);
 			break;
 #endif
-#if MVK_XCODE_14
+#if MVK_XCODE_14 && !MVK_USE_MSL_2_4
 		case MTLLanguageVersion3_0:
 			setMSLVersion(3, 0);
 			break;

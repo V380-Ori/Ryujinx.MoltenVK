@@ -744,7 +744,7 @@ MTLTextureUsage MVKPixelFormats::getMTLTextureUsage(VkImageUsageFlags vkImageUsa
 		mvkEnableFlags(mtlUsage, MTLTextureUsageShaderWrite);
 	}
 
-#if MVK_XCODE_15
+#if MVK_XCODE_15 && !MVK_USE_MSL_2_4
 	if (supportAtomics && (mtlFormat == MTLPixelFormatR32Uint || mtlFormat == MTLPixelFormatR32Sint)) {
 		mvkEnableFlags(mtlUsage, MTLTextureUsageShaderAtomic);
 	}

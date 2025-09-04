@@ -106,6 +106,11 @@ extern "C" {
 #	define MVK_MACOS_APPLE_SILICON	(MVK_MACOS && MVK_APPLE_SILICON)
 #endif
 
+/** Metal compiler compiles MSL 2.4 shaders 1.9x faster than MSL >3.0. */
+#ifndef MVK_USE_MSL_2_4
+#	define MVK_USE_MSL_2_4		1
+#endif
+
 /** Building with Xcode versions. */
 #ifndef MVK_XCODE_26
 #   define MVK_XCODE_26             ((__MAC_OS_X_VERSION_MAX_ALLOWED >= 260000) || \

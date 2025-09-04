@@ -326,7 +326,7 @@ id<MTLTexture> MVKBufferView::getMTLTexture() {
 		MTLTextureUsage usage = MTLTextureUsageShaderRead;
 		if ( mvkIsAnyFlagEnabled(_usage, VK_BUFFER_USAGE_2_STORAGE_TEXEL_BUFFER_BIT) ) {
 			usage |= MTLTextureUsageShaderWrite;
-#if MVK_XCODE_15
+#if MVK_XCODE_15 && !MVK_USE_MSL_2_4
 			if (getMetalFeatures().nativeTextureAtomics && (_mtlPixelFormat == MTLPixelFormatR32Sint || _mtlPixelFormat == MTLPixelFormatR32Uint))
 				usage |= MTLTextureUsageShaderAtomic;
 #endif

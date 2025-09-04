@@ -1221,8 +1221,11 @@ MVKImage::MVKImage(MVKDevice* device, const VkImageCreateInfo* pCreateInfo) : MV
 				((_vkFormat == VK_FORMAT_R32_UINT || _vkFormat == VK_FORMAT_R32_SINT) ||
 					(_hasMutableFormat && pixFmts->getViewClass(_vkFormat) == MVKMTLViewClass::Color32 && (getIsValidViewFormat(VK_FORMAT_R32_UINT) || getIsValidViewFormat(VK_FORMAT_R32_SINT))));
 
+#if !MVK_USE_MSL_2_4
 	_isLinearForAtomics = _shouldSupportAtomics && !getMetalFeatures().nativeTextureAtomics && _arrayLayers == 1 && getImageType() == VK_IMAGE_TYPE_2D;
-
+#else
+	_isLinearForAtomics = _isLinear && _shouldSupportAtomics;
+#endif
 	_is3DCompressed = (getImageType() == VK_IMAGE_TYPE_3D) && (pixFmts->getFormatType(pCreateInfo->format) == kMVKFormatCompressed) && !mtlFeats.native3DCompressedTextures;
 	_isDepthStencilAttachment = (mvkAreAllFlagsEnabled(pCreateInfo->usage, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ||
 								 mvkAreAllFlagsEnabled(pixFmts->getVkFormatProperties3(pCreateInfo->format).optimalTilingFeatures, VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT));
