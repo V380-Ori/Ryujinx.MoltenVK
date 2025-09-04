@@ -923,7 +923,7 @@ void MVKPhysicalDevice::getProperties(VkPhysicalDeviceProperties2* properties) {
 	supportedProps14.lineSubPixelPrecisionBits = 4;
 	supportedProps14.maxVertexAttribDivisor = kMVKUndefinedLargeUInt32;
 	supportedProps14.supportsNonZeroFirstInstance = true;
-	supportedProps14.maxPushDescriptors = _properties.limits.maxPerStageResources;
+	supportedProps14.maxPushDescriptors = 16;
 	supportedProps14.dynamicRenderingLocalReadDepthStencilAttachments = true;
 	supportedProps14.dynamicRenderingLocalReadMultisampledAttachments = true;
 	supportedProps14.earlyFragmentMultisampleCoverageAfterSampleCounting = true;
