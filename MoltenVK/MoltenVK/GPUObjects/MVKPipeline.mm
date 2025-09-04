@@ -2029,6 +2029,7 @@ void MVKGraphicsPipeline::initShaderConversionConfig(SPIRVToMSLConversionConfigu
 	shaderConfig.options.mslOptions.pad_argument_buffer_resources = useMetalArgBuff;
 	shaderConfig.options.mslOptions.argument_buffers_tier = (SPIRV_CROSS_NAMESPACE::CompilerMSL::Options::ArgumentBuffersTier)getMetalFeatures().argumentBuffersTier;
 	shaderConfig.options.mslOptions.agx_manual_cube_grad_fixup = mtlFeats.needsCubeGradWorkaround;
+	shaderConfig.options.mslOptions.readwrite_texture_fences = false;
 
 	MVKPipelineLayout* layout = (MVKPipelineLayout*)pCreateInfo->layout;
 	layout->populateShaderConversionConfig(shaderConfig);
