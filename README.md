@@ -1,3 +1,22 @@
+# MoltenVK rebased for Ryujinx
+
+This is a custom fork of MoltenVK tailored for Ryujinx.
+The fork is based on upstream MoltenVK but selectively omits certain commits that cause regression on Ryujinx.
+
+### Commits Removed:
+* Add support for VK_EXT_external_memory_host extension. (#1854)
+* Add VK_EXT_external_memory_metal (#2314)
+* Fix race condition when VkImage destroyed while used by descriptor. (#2320)
+* Avoid calling useResource on resources in argument buffers (#2402)
+* MVKCmdWaitEvents: end current encoder before encodeWait (#2422)
+* MVKQueue: Remove residency set from MTLCommandQueue on destruction. (#2452)
+* Add support for VK_EXT_index_type_uint8 (#2504)
+* Remove CPU path from Uint8 index handling. (#2506)
+* Minor optimization in processing resource residency sets. (#2539)
+
+
+
+
 <a class="site-logo" href="https://github.com/KhronosGroup/MoltenVK" title="MoltenVK">
 	<img src="Docs/images/MoltenVK-Logo-Banner.png" alt="MoltenVK" style="width:256px;height:auto">
 </a>
