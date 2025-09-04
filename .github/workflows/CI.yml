@@ -3,7 +3,6 @@ name: CI
 # Controls when the action will run. 
 on:
   # Triggers the workflow on push or pull request events
-  push:
   pull_request:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -15,19 +14,12 @@ jobs:
   build:
     strategy:
       matrix:
-        # Primary build on latest macOS and its default Xcode version
-        os: [ "macos-latest" ]
-        platform: [ "all", "macos", "ios" ]
+        # Primary build on macOS 15 and its default Xcode version
+        os: [ "macos-15" ]
+        platform: [ "macos", "ios" ]
         upload_artifacts: [ true ]
         select_xcode: [ false ]
 
-        # Legacy build. Up to 3 versions behind latest (or beta).
-        include:
-          - os: "macos-13"
-            xcode: "14.3.1"
-            platform: "macos"
-            upload_artifacts: false
-            select_xcode: true
       fail-fast: false
 
     name: 'MoltenVK (Xcode ${{ matrix.xcode }} - ${{ matrix.platform }})'
