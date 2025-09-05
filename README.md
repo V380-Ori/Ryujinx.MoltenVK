@@ -3,6 +3,8 @@
 This is a custom fork of MoltenVK tailored for Ryujinx.
 The fork is based on upstream MoltenVK but selectively omits certain commits that cause regression on Ryujinx.
 
+[![NuGet](https://img.shields.io/nuget/v/Ryujinx.MoltenVK.svg)](https://www.nuget.org/packages/Ryujinx.MoltenVK)
+
 ### Commits Removed:
 * Add support for VK_EXT_external_memory_host extension. (#1854)
 * Add VK_EXT_external_memory_metal (#2314)
