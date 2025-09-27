@@ -946,9 +946,7 @@ id<MTLCommandEncoder> MVKCommandEncoder::getMTLEncoder(){
 void MVKCommandEncoder::setVertexBytes(id<MTLRenderCommandEncoder> mtlEncoder,
                                        const void* bytes,
                                        NSUInteger length,
-                                       uint32_t mtlBuffIndex,
-                                       bool descOverride)
-{
+                                       uint32_t mtlBuffIndex) {
 	auto& mtlFeats = getMetalFeatures();
 	if (mtlFeats.dynamicMTLBufferSize && length <= mtlFeats.dynamicMTLBufferSize) {
 		getMtlGraphics().bindVertexBytes(mtlEncoder, bytes, length, mtlBuffIndex);
@@ -961,9 +959,7 @@ void MVKCommandEncoder::setVertexBytes(id<MTLRenderCommandEncoder> mtlEncoder,
 void MVKCommandEncoder::setFragmentBytes(id<MTLRenderCommandEncoder> mtlEncoder,
                                          const void* bytes,
                                          NSUInteger length,
-                                         uint32_t mtlBuffIndex,
-                                         bool descOverride)
-{
+                                         uint32_t mtlBuffIndex) {
 	auto& mtlFeats = getMetalFeatures();
 	if (mtlFeats.dynamicMTLBufferSize && length <= mtlFeats.dynamicMTLBufferSize) {
 		getMtlGraphics().bindFragmentBytes(mtlEncoder, bytes, length, mtlBuffIndex);
@@ -976,9 +972,7 @@ void MVKCommandEncoder::setFragmentBytes(id<MTLRenderCommandEncoder> mtlEncoder,
 void MVKCommandEncoder::setComputeBytes(id<MTLComputeCommandEncoder> mtlEncoder,
                                         const void* bytes,
                                         NSUInteger length,
-                                        uint32_t mtlBuffIndex,
-                                        bool descOverride)
-{
+                                        uint32_t mtlBuffIndex) {
 	auto& mtlFeats = getMetalFeatures();
 	if (mtlFeats.dynamicMTLBufferSize && length <= mtlFeats.dynamicMTLBufferSize) {
 		getMtlCompute().bindBytes(mtlEncoder, bytes, length, mtlBuffIndex);
@@ -1157,8 +1151,7 @@ void MVKCommandEncoder::finishQueries() {
 MVKCommandEncoder::MVKCommandEncoder(MVKCommandBuffer* cmdBuffer, MVKPrefillMetalCommandBuffersStyle prefillStyle)
 	: MVKBaseDeviceObject(cmdBuffer->getDevice())
 	, _cmdBuffer(cmdBuffer)
-	, _prefillStyle(prefillStyle)
-{
+	, _prefillStyle(prefillStyle) {
 	_pActivatedQueries = nullptr;
 	_mtlCmdBuffer = nil;
 	_mtlRenderEncoder = nil;

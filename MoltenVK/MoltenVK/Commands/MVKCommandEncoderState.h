@@ -42,7 +42,7 @@ enum class MVKMetalGraphicsStage {
 
 #pragma mark - Dynamic Resource Binders
 
-/** Dynamic dispatch for binding resources to an encoder */
+/** Provides dynamic dispatch for binding resources to an encoder. */
 struct MVKResourceBinder {
 	typedef void (*UseResource)(id<MTLCommandEncoder> encoder, id<MTLResource> resource, MTLResourceUsage usage, MVKResourceUsageStages stages);
 	SEL _setBytes;
@@ -82,7 +82,7 @@ struct MVKResourceBinder {
 	static const MVKResourceBinder& Compute()  { return Get(Stage::Compute); }
 };
 
-/** Dynamic dispatch for binding vertex buffers to an encoder */
+/** Provides dynamic dispatch for binding vertex buffers to an encoder. */
 struct MVKVertexBufferBinder {
 	SEL _setBuffer;
 	SEL _setOffset;
@@ -129,7 +129,7 @@ struct MVKVertexBufferBinder {
 
 #pragma mark - Vulkan Command Encoder State Structs
 
-/** Tracks state that's shared across both render and compute bind points */
+/** Tracks state that's shared across both render and compute bind points. */
 struct MVKVulkanSharedCommandEncoderState {
 	MVKSmallVector<uint8_t, 128> _pushConstants;
 };
@@ -162,9 +162,12 @@ struct MVKUseResourceHelper {
 	};
 	MVKOnePerEnumEntry<Entry, MVKResourceUsageStages> entries;
 	std::unordered_map<id<MTLResource>, ResourceInfo> used;
-	/// Add a resource to the list of resources to use
+	/** Add a resource to the list of resources to use. */
 	void add(id<MTLResource> resource, MVKResourceUsageStages stage, bool write);
-	/// Immediately use the given resource (important if you're holding a live resources lock and need to useResource before releasing the lock)
+	/**
+	 * Immediately use the given resource.
+	 * (Important if you're holding a live resources lock and need to useResource before releasing the lock.)
+	 */
 	void addImmediate(id<MTLResource> resource, id<MTLCommandEncoder> enc, MVKResourceBinder::UseResource func, MVKResourceUsageStages stage, bool write);
 	void bindAndResetGraphics(id<MTLRenderCommandEncoder> encoder);
 	void bindAndResetCompute(id<MTLComputeCommandEncoder> encoder);
@@ -172,7 +175,7 @@ struct MVKUseResourceHelper {
 
 /**
  * Tracks state that is needed by all Vulkan command encoder state trackers but independent
- * (commands that update these take a VkPipelineBindPoint to specify which state to update)
+ * (Commands that update these take a VkPipelineBindPoint to specify which state to update)
  */
 struct MVKVulkanCommonEncoderState {
 	MVKPipelineLayout* _layout = nullptr;
@@ -217,7 +220,7 @@ struct MVKVulkanGraphicsCommandEncoderState: public MVKVulkanCommonEncoderState 
 	                        const uint32_t* dynamicOffsets);
 };
 
-/** Tracks the state of a Vulkan compute encoder */
+/** Tracks the state of a Vulkan compute encoder. */
 struct MVKVulkanComputeCommandEncoderState: public MVKVulkanCommonEncoderState {
 	MVKComputePipeline* _pipeline = nullptr;
 	MVKImplicitBufferData _implicitBufferData;
@@ -235,10 +238,10 @@ struct MVKMetalSharedCommandEncoderState {
 	/** Storage space for use by various methods to reduce alloc/free. */
 	MVKSmallVector<uint32_t, 8> _scratch;
 
-	/** Storage for useResource tracking */
+	/** Storage for tracking which objects need to have useResource called on them. */
 	MVKUseResourceHelper _useResource;
 
-	/** Which GPU addressable resources have been added to `_useResource` */
+	/** Which GPU addressable resources have been added to `_useResource`. */
 	MVKResourceUsageStages _gpuAddressableResourceStages;
 
 	void reset() {
@@ -294,7 +297,7 @@ using MVKMetalRenderEncoderStateFlags = MVKFlagList<MVKMetalRenderEncoderStateFl
 
 class MVKRenderSubpass;
 
-/** The state for a draw inserted by MoltenVK */
+/** The state for a draw inserted by MoltenVK. */
 struct MVKHelperDrawState {
 	id<MTLRenderPipelineState> pipeline;
 	VkRect2D viewportAndScissor;
@@ -303,7 +306,7 @@ struct MVKHelperDrawState {
 	bool writeStencil;
 };
 
-/** Subset of MVKMetalGraphicsCommandEncoderState to reset with memset */
+/** Subset of MVKMetalGraphicsCommandEncoderState that can be reset with memset. */
 struct MVKMetalGraphicsCommandEncoderStateQuickReset {
 	/**
 	 * If clear, ignore the binding in `bindings` and assume the Metal default value (usually nil / zero).
@@ -313,9 +316,9 @@ struct MVKMetalGraphicsCommandEncoderStateQuickReset {
 
 	id<MTLRenderPipelineState> _pipeline;
 
-	/** Flags that mark whether a render state matches the current Vulkan render state */
+	/** Flags that mark whether a render state matches the current Vulkan render state. */
 	MVKRenderStateFlags _stateReady;
-	/** Other single-bit flags */
+	/** Other single-bit flags. */
 	MVKMetalRenderEncoderStateFlags _flags;
 
 	MVKStencilReference _stencilReference;
@@ -327,12 +330,12 @@ struct MVKMetalGraphicsCommandEncoderStateQuickReset {
 	uint8_t _frontFace;
 	MVKPolygonMode _polygonMode;
 
-	// Memset 0 to here to clear
-	// (If you memset sizeof(*this) you'll clear padding, which is used by subclasses)
+	// Memset 0 to here to clear.
+	// DO NOT memset sizeof(*this), or you'll clear padding, which is used by subclasses.
 	struct {} MEMSET_RESET_LINE;
 };
 
-/** Tracks the state of a Metal render encoder */
+/** Tracks the state of a Metal render encoder. */
 struct MVKMetalGraphicsCommandEncoderState : public MVKMetalGraphicsCommandEncoderStateQuickReset {
 	uint8_t _primitiveType;
 	uint8_t _numSamplePositions = 0;
@@ -350,7 +353,7 @@ struct MVKMetalGraphicsCommandEncoderState : public MVKMetalGraphicsCommandEncod
 
 	MTLPrimitiveType getPrimitiveType() const { return static_cast<MTLPrimitiveType>(_primitiveType); }
 
-	/** For API compatibility with MVKMetalComputeCommandEncoderState */
+	/** For API compatibility with MVKMetalComputeCommandEncoderState. */
 	MVKArrayRef<MVKStageResourceBits> exists() { return _exists.elements; }
 
 	/** Reset to the state of a fresh Metal render encoder. */
@@ -394,7 +397,7 @@ struct MVKMetalComputeCommandEncoderState {
 	// Everything above here can be reset by a memset from the beginning of the struct to offsetof(struct, MEMSET_RESET_LINE)
 	struct {} MEMSET_RESET_LINE;
 
-	/** The current stage being run on this compute encoder */
+	/** The current stage being run on this compute encoder. */
 	MVKShaderStage _vkStage = kMVKShaderStageCount;
 
 	MVKStageResourceBindings _bindings;
@@ -408,7 +411,7 @@ struct MVKMetalComputeCommandEncoderState {
 	void prepareComputeDispatch(id<MTLComputeCommandEncoder> encoder, MVKCommandEncoder& mvkEncoder, const MVKVulkanComputeCommandEncoderState& vkState, const MVKVulkanSharedCommandEncoderState& vkShared);
 	void prepareRenderDispatch(id<MTLComputeCommandEncoder> encoder, MVKCommandEncoder& mvkEncoder, const MVKVulkanGraphicsCommandEncoderState& vkState, const MVKVulkanSharedCommandEncoderState& vkShared, MVKShaderStage stage);
 
-	/** For API compatibility with MVKMetalGraphicsCommandEncoderState */
+	/** For API compatibility with MVKMetalGraphicsCommandEncoderState. */
 	MVKArrayRef<MVKStageResourceBits> exists() { return {&_exists, 1}; }
 
 	void reset();
@@ -416,7 +419,7 @@ struct MVKMetalComputeCommandEncoderState {
 
 #pragma mark - MVKCommandEncoderState
 
-/** Class that holds both Metal and Vulkan state for both compute and graphics */
+/** Holds both Metal and Vulkan state for both compute and graphics. */
 class MVKCommandEncoderState {
 	MVKVulkanSharedCommandEncoderState   _vkShared;
 	MVKVulkanGraphicsCommandEncoderState _vkGraphics;
@@ -429,60 +432,60 @@ class MVKCommandEncoderState {
 		Graphics,
 		Compute
 	};
-	/** Which Metal encoder is currently active */
+	/** The type of Metal encoder, if any, that is currently active. */
 	CommandEncoderClass _mtlActiveEncoder;
 
-	/** Get the encoder state associated with the given bind point (or nullptr if the bindPoint isn't supported). */
+	/** Get the encoder state associated with the given bind point, or nullptr if the bindPoint isn't supported. */
 	MVKVulkanCommonEncoderState* getVkEncoderState(VkPipelineBindPoint bindPoint);
 
 public:
-	/** Get a reference to the Vulkan state shared between graphics and compute.  Read only, use methods on this class (which will invalidate associated Metal state) to modify. */
+	/** Get a reference to the Vulkan state shared between graphics and compute.  Read-only, use methods on this class (which will invalidate associated Metal state) to modify. */
 	const MVKVulkanSharedCommandEncoderState&   vkShared()   const { return _vkShared; }
-	/** Get a reference to the Vulkan graphics state.  Read only, use methods on this class (which will invalidate associated Metal state) to modify. */
+	/** Get a reference to the Vulkan graphics state.  Read-only, use methods on this class (which will invalidate associated Metal state) to modify. */
 	const MVKVulkanGraphicsCommandEncoderState& vkGraphics() const { return _vkGraphics; }
-	/** Get a reference to the Vulkan compute state.  Read only, use methods on this class (which will invalidate associated Metal state) to modify. */
+	/** Get a reference to the Vulkan compute state.  Read-only, use methods on this class (which will invalidate associated Metal state) to modify. */
 	const MVKVulkanComputeCommandEncoderState&  vkCompute()  const { return _vkCompute; }
-	/** Get a reference to the Metal state shared between graphics and compute. */
+	/** Returns a reference to the Metal state shared between graphics and compute. */
 	MVKMetalSharedCommandEncoderState&   mtlShared()   { return _mtlShared; }
-	/** Get a reference to the Metal graphics state. */
+	/** Returns a reference to the Metal graphics state. */
 	MVKMetalGraphicsCommandEncoderState& mtlGraphics() { return _mtlGraphics; }
-	/** Get a reference to the Metal compute state. */
+	/** Returns a reference to the Metal compute state. */
 	MVKMetalComputeCommandEncoderState&  mtlCompute()  { return _mtlCompute; }
 
 	/**
-	 * Update the given dynamic state, invalidating the passed flags on the Metal graphics state.
-	 * (Use the returned reference to do the actual update to the Vulkan state.)
+	 * Updates the given dynamic state, invalidating the passed flags on the Metal graphics state.
+	 * Use the returned reference to do the actual update to the Vulkan state.
 	 */
 	MVKVulkanGraphicsCommandEncoderState& updateDynamicState(MVKRenderStateFlags state) {
 		_mtlGraphics.markDirty(state);
 		return _vkGraphics;
 	}
 
-	/** Get the current sample positions and mark those positions as the currently bound positions. */
+	/** Returns the current sample positions and marks those positions as the currently bound positions. */
 	MVKArrayRef<const MTLSamplePosition> updateSamplePositions();
-	/** Check if the render pass needs to be restarted before drawing with the current graphics configuration. */
+	/** Checks if the render pass needs to be restarted before drawing with the current graphics configuration. */
 	bool needsMetalRenderPassRestart();
-	/** Bind everything needed to render with the current Vulkan graphics state on the current Metal graphics state. */
+	/** Binds everything needed to render with the current Vulkan graphics state on the current Metal graphics state. */
 	void prepareDraw(id<MTLRenderCommandEncoder> encoder, MVKCommandEncoder& mvkEncoder) {
 		_mtlGraphics.prepareDraw(encoder, mvkEncoder, _vkGraphics, _vkShared);
 	}
-	/** Bind everything needed to dispatch a compute-based emulation of the given stage of the current Vulkan graphics state on the current Metal compute state. */
+	/** Binds everything needed to dispatch a compute-based emulation of the given stage of the current Vulkan graphics state on the current Metal compute state. */
 	void prepareRenderDispatch(id<MTLComputeCommandEncoder> encoder, MVKCommandEncoder& mvkEncoder, MVKGraphicsStage stage) {
 		assert(stage == kMVKGraphicsStageVertex || stage == kMVKGraphicsStageTessControl);
 		MVKShaderStage shaderStage = stage == kMVKGraphicsStageVertex ? kMVKShaderStageVertex : kMVKShaderStageTessCtl;
 		_mtlCompute.prepareRenderDispatch(encoder, mvkEncoder, _vkGraphics, _vkShared, shaderStage);
 	}
-	/** Bind everything needed to dispatch a Vulkan compute shader on the current Metal compute state. */
+	/** Binds everything needed to dispatch a Vulkan compute shader on the current Metal compute state. */
 	void prepareComputeDispatch(id<MTLComputeCommandEncoder> encoder, MVKCommandEncoder& mvkEncoder) {
 		_mtlCompute.prepareComputeDispatch(encoder, mvkEncoder, _vkCompute, _vkShared);
 	}
-	/** Bind the given graphics pipeline to the Vulkan graphics state, invalidating any necessary resources. */
+	/** Binds the given graphics pipeline to the Vulkan graphics state, invalidating any necessary resources. */
 	void bindGraphicsPipeline(MVKGraphicsPipeline* pipeline);
-	/** Bind the given compute pipeline to the Vulkan graphics state, invalidating any necessary resources. */
+	/** Binds the given compute pipeline to the Vulkan graphics state, invalidating any necessary resources. */
 	void bindComputePipeline(MVKComputePipeline* pipeline);
-	/** Bind the given push constants to the Vulkan state, invalidating any necessary resources. */
+	/** Binds the given push constants to the Vulkan state, invalidating any necessary resources. */
 	void pushConstants(uint32_t offset, uint32_t size, const void* data);
-	/** Bind the given descriptor sets to the Vulkan state, invalidating any necessary resources. */
+	/** Binds the given descriptor sets to the Vulkan state, invalidating any necessary resources. */
 	void bindDescriptorSets(VkPipelineBindPoint bindPoint,
 	                        MVKPipelineLayout* layout,
 	                        uint32_t firstSet,
@@ -490,23 +493,23 @@ public:
 	                        MVKDescriptorSet*const* sets,
 	                        uint32_t dynamicOffsetCount,
 	                        const uint32_t* dynamicOffsets);
-	/** Apply the given descriptor set writes to the push descriptor set on bindPoint. */
+	/** Applies the given descriptor set writes to the push descriptor set on bindPoint. */
 	void pushDescriptorSet(VkPipelineBindPoint bindPoint, MVKPipelineLayout* layout, uint32_t set, uint32_t writeCount, const VkWriteDescriptorSet* writes);
-	/** Apply the given descriptor update template to the push descriptor to its specified bindPoint. */
+	/** Applies the given descriptor update template to the push descriptor to its specified bindPoint. */
 	void pushDescriptorSet(MVKDescriptorUpdateTemplate* updateTemplate, MVKPipelineLayout* layout, uint32_t set, const void* data);
-	/** Bind the given vertex buffers to the Vulkan state, invalidating any necessary resources. */
+	/** Binds the given vertex buffers to the Vulkan state, invalidating any necessary resources. */
 	void bindVertexBuffers(uint32_t firstBinding, MVKArrayRef<const MVKVertexMTLBufferBinding> buffers);
-	/** Bind the given index buffer to the Vulkan state, invalidating any necessary resources. */
+	/** Binds the given index buffer to the Vulkan state, invalidating any necessary resources. */
 	void bindIndexBuffer(const MVKIndexMTLBufferBinding& buffer);
 	void offsetZeroDivisorVertexBuffers(MVKCommandEncoder& mvkEncoder, MVKGraphicsStage stage, MVKGraphicsPipeline* pipeline, uint32_t firstInstance);
 
-	/** Begin tracking for a fresh MTLRenderCommandEncoder. */
+	/** Begins tracking for a fresh MTLRenderCommandEncoder. */
 	void beginGraphicsEncoding(VkSampleCountFlags sampleCount);
-	/** Begin tracking for a fresh MTLComputeCommandEncoder. */
+	/** Begins tracking for a fresh MTLComputeCommandEncoder. */
 	void beginComputeEncoding();
 
 	/**
-	 * Call the given function on either the Metal graphics or compute state tracker, whichever one is active (or neither if neither is active).
+	 * Calls the given function on either the Metal graphics or compute state tracker, whichever one is active (or neither if neither is active).
 	 * `bindPoint` can be used to only call the function if the given Vulkan pipeline is being encoded to the active encoder.
 	 */
 	template <typename Fn>

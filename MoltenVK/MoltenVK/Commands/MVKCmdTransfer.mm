@@ -1541,10 +1541,10 @@ void MVKCmdClearAttachments<N>::encode(MVKCommandEncoder* cmdEncoder) {
 	state.writeDepth         = rpsKey.isAttachmentUsed(kMVKClearAttachmentDepthIndex);
 	state.writeStencil       = rpsKey.isAttachmentUsed(kMVKClearAttachmentStencilIndex);
 	cmdEncoder->getMtlGraphics().prepareHelperDraw(mtlRendEnc, *cmdEncoder, state);
-    cmdEncoder->setVertexBytes(mtlRendEnc, clearColors, sizeof(clearColors), 0, true);
-    cmdEncoder->setFragmentBytes(mtlRendEnc, clearColors, sizeof(clearColors), 0, true);
-    cmdEncoder->setVertexBytes(mtlRendEnc, vertices, vtxCnt * sizeof(vertices[0]),
-							   cmdEncoder->getDevice()->getMetalBufferIndexForVertexAttributeBinding(kMVKVertexContentBufferIndex), true);
+	cmdEncoder->setVertexBytes(mtlRendEnc, clearColors, sizeof(clearColors), 0);
+	cmdEncoder->setFragmentBytes(mtlRendEnc, clearColors, sizeof(clearColors), 0);
+	cmdEncoder->setVertexBytes(mtlRendEnc, vertices, vtxCnt * sizeof(vertices[0]),
+	                           cmdEncoder->getDevice()->getMetalBufferIndexForVertexAttributeBinding(kMVKVertexContentBufferIndex));
     [mtlRendEnc drawPrimitives: MTLPrimitiveTypeTriangle vertexStart: 0 vertexCount: vtxCnt];
     [mtlRendEnc popDebugGroup];
 

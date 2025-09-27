@@ -373,28 +373,28 @@ public:
 	 */
 	id<MTLCommandEncoder> getMTLEncoder();
 
-	/** Returns the graphics encoder state */
+	/** Returns the command encoder state. */
 	MVKCommandEncoderState& getState() { return _state; }
 
-	/** Returns the Vulkan graphics encoder state */
+	/** Returns the Vulkan graphics encoder state. */
 	const MVKVulkanGraphicsCommandEncoderState& getVkGraphics() const { return _state.vkGraphics(); }
 
-	/** Returns the Metal graphics encoder state */
+	/** Returns the Metal graphics encoder state. */
 	MVKMetalGraphicsCommandEncoderState& getMtlGraphics() { return _state.mtlGraphics(); }
 
-	/** Returns the Vulkan compute encoder state */
+	/** Returns the Vulkan compute encoder state. */
 	const MVKVulkanComputeCommandEncoderState& getVkCompute() const { return _state.vkCompute(); }
 
-	/** Returns the Metal compute encoder state */
+	/** Returns the Metal compute encoder state. */
 	MVKMetalComputeCommandEncoderState& getMtlCompute() { return _state.mtlCompute(); }
 
-	/** Prepares state for a rasterization pipeline draw */
+	/** Prepares state for a rasterization pipeline draw. */
 	void prepareDraw() { _state.prepareDraw(_mtlRenderEncoder, *this); }
 
-	/** Prepares the Metal compute pipeline state to dispatch the given stage of the Vulkan render pipeline */
+	/** Prepares the Metal compute pipeline state to dispatch the given stage of the Vulkan render pipeline. */
 	void prepareRenderDispatch(MVKGraphicsStage stage) { _state.prepareRenderDispatch(_mtlComputeEncoder, *this, stage); }
 
-	/** Prepares the Metal compute pipeline state to dispatch the given stage of the Vulkan render pipeline */
+	/** Prepares the Metal compute pipeline state to dispatch the given stage of the Vulkan render pipeline. */
 	void prepareComputeDispatch() { _state.prepareComputeDispatch(_mtlComputeEncoder, *this); }
 
 	/** Returns the graphics pipeline. */
@@ -408,24 +408,24 @@ public:
 	 * that this binding might override a desriptor binding. If so, the descriptor binding will
 	 * be marked dirty so that it will rebind before the next usage.
 	 */
-    void setVertexBytes(id<MTLRenderCommandEncoder> mtlEncoder, const void* bytes,
-						NSUInteger length, uint32_t mtlBuffIndex, bool descOverride = false);
+	void setVertexBytes(id<MTLRenderCommandEncoder> mtlEncoder, const void* bytes,
+	                    NSUInteger length, uint32_t mtlBuffIndex);
 
 	/**
 	 * Copy bytes into the Metal encoder at a Metal fragment buffer index, and optionally indicate
 	 * that this binding might override a desriptor binding. If so, the descriptor binding will
 	 * be marked dirty so that it will rebind before the next usage.
 	 */
-    void setFragmentBytes(id<MTLRenderCommandEncoder> mtlEncoder, const void* bytes,
-						  NSUInteger length, uint32_t mtlBuffIndex, bool descOverride = false);
+	void setFragmentBytes(id<MTLRenderCommandEncoder> mtlEncoder, const void* bytes,
+	                      NSUInteger length, uint32_t mtlBuffIndex);
 
 	/**
 	 * Copy bytes into the Metal encoder at a Metal compute buffer index, and optionally indicate
 	 * that this binding might override a desriptor binding. If so, the descriptor binding will
 	 * be marked dirty so that it will rebind before the next usage.
 	 */
-    void setComputeBytes(id<MTLComputeCommandEncoder> mtlEncoder, const void* bytes,
-						 NSUInteger length, uint32_t mtlBuffIndex, bool descOverride = false);
+	void setComputeBytes(id<MTLComputeCommandEncoder> mtlEncoder, const void* bytes,
+	                     NSUInteger length, uint32_t mtlBuffIndex);
 
     /** Get a temporary MTLBuffer that will be returned to a pool after the command buffer is finished. */
     const MVKMTLBufferAllocation* getTempMTLBuffer(NSUInteger length, bool isPrivate = false, bool isDedicated = false);
@@ -464,7 +464,7 @@ public:
 	/** The current Metal render encoder. */
 	id<MTLRenderCommandEncoder> _mtlRenderEncoder;
 
-	/** Tracks the state of the encoding */
+	/** Tracks the state of command encoding. */
 	MVKCommandEncoderState _state;
 
 	/** Tracks the occlusion query state of the encoder. */

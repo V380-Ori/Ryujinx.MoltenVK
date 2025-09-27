@@ -48,7 +48,7 @@ static constexpr uint32_t descriptorCPUAlign(MVKDescriptorCPULayout layout) {
 
 /**
  * The number of bytes to advance when moving to the next descriptor, per descriptor element.
- * (Note that OutlinedData is one element in the descriptor regardless of descriptorCount)
+ * (Note that OutlinedData is one element in the descriptor regardless of descriptorCount.)
  */
 static constexpr uint32_t descriptorGPUSizeMetal3(MVKDescriptorGPULayout layout) {
 	switch (layout) {
@@ -162,7 +162,7 @@ static bool needsAuxBuf(MVKDescriptorGPULayout layout) {
 	return layout == MVKDescriptorGPULayout::BufferAuxSize;
 }
 
-/** Select an argument buffer mode for the given device.  Descriptor sets on the device may use this mode or Off, but not any others. */
+/** Selects an argument buffer mode for the given device.  Descriptor sets on the device may use this mode or Off, but not any others. */
 static MVKArgumentBufferMode pickArgumentBufferMode(MVKDevice* dev) {
 	if (dev->getPhysicalDevice()->isUsingMetalArgumentBuffers()) {
 		if (dev->getPhysicalDevice()->getMetalFeatures()->needsArgumentBufferEncoders)
@@ -183,7 +183,7 @@ static bool mayDisableArgumentBuffers(MVKDevice* dev) {
 #endif
 }
 
-/** Select an argument buffer mode for the given device descriptor layout. */
+/** Selects an argument buffer mode for the given device descriptor layout. */
 static MVKArgumentBufferMode pickArgumentBufferMode(MVKDevice* dev, const VkDescriptorSetLayoutCreateInfo* pCreateInfo) {
 	MVKArgumentBufferMode mode = pickArgumentBufferMode(dev);
 	if (mode == MVKArgumentBufferMode::Off) // The following checks only switch argument buffers off, so we can skip them if they're already off.
@@ -206,27 +206,27 @@ static MVKArgumentBufferMode pickArgumentBufferMode(MVKDevice* dev, const VkDesc
 	return mode;
 }
 
-/** Binding metadata about immutable samplers and their ycbcr plane counts */
+/** Binding metadata about immutable samplers and their Y'CbCr plane counts. */
 class ImmutableSamplerPlaneInfo {
 	/**
-	 * bit 0: 1 if has non-ycbcr immutable samplers
-	 * bits 1:30: max ycbcr plane count
-	 * bit 31: if set, this is just asking for the maximum size, and the rest of the bits don't matter
+	 * Bit 0: set if non-Y'CbCr-conversion immutable samplers are present.
+	 * Bits 1-30: maximum Y'CbCr plane count.
+	 * Bit 31: if set, this is just asking for the maximum size, and the rest of the bits don't matter.
 	 */
 	uint32_t data;
 public:
 	/**
-	 * Check whether the descriptor has immutable samplers.
+	 * Returns whether the descriptor has immutable samplers.
 	 * Note that this will return false on MaxSize, while hasYCBCR will return true.
-	 * (Use in situations where having an immutable sampler requiers less space than not having one)
+	 * (Use in situations where having an immutable sampler requires less space than not having one.)
 	 */
 	bool hasImmutableSamplers() const { return static_cast<int32_t>(data) > 0; }
-	/** Check whether the descriptor has non-ycbcr immutable samplers */
+	/** Returns whether the descriptor has Y'CbCr immutable samplers. */
 	bool hasYCBCR() const { return data >> 1; }
-	/** Check whether the descriptor has ycbcr immutable samplers */
+	/** Returns whether the descriptor has non-Y'CbCr immutable samplers. */
 	bool hasNonYCBCR() const { return data & 1; }
 	bool isMaxSize() const { return static_cast<int32_t>(data) < 0; }
-	/** Get the number of planes.  If MaxSize, will return an incredibly large number. */
+	/** Returns the number of planes.  If requesting MaxSize, returns an indefinitely large number. */
 	uint32_t planeCount() { return data >> 1; }
 	ImmutableSamplerPlaneInfo(): data(0) {}
 	ImmutableSamplerPlaneInfo(MVKSampler* sampler) {
@@ -239,7 +239,7 @@ public:
 	void add(ImmutableSamplerPlaneInfo other) {
 		data = (data + (other.data & 0xfffffffe)) | (other.data & 1);
 	}
-	/** Get the worst case from a size perspective, when you don't know the full details */
+	/** Returns the worst case size, when the full details are unknown. */
 	static ImmutableSamplerPlaneInfo MaxSize() {
 		ImmutableSamplerPlaneInfo info;
 		info.data = ~0u;
@@ -328,12 +328,11 @@ static MVKDescriptorResourceCount perDescriptorResourceCount(VkDescriptorType ty
 }
 
 static MVKDescriptorCPULayout pickCPULayout(
-	VkDescriptorType type,
-	uint32_t count,
-	MVKArgumentBufferMode argBuf,
-	MVKDevice* dev,
-	ImmutableSamplerPlaneInfo planes = ImmutableSamplerPlaneInfo::MaxSize())
-{
+  VkDescriptorType type,
+  uint32_t count,
+  MVKArgumentBufferMode argBuf,
+  MVKDevice* dev,
+  ImmutableSamplerPlaneInfo planes = ImmutableSamplerPlaneInfo::MaxSize()) {
 	if (count == 0)
 		return MVKDescriptorCPULayout::None;
 	bool nativeSwizzle = dev->getPhysicalDevice()->getMetalFeatures()->nativeTextureSwizzle;
@@ -364,12 +363,11 @@ static MVKDescriptorCPULayout pickCPULayout(
 }
 
 static MVKDescriptorGPULayout pickGPULayout(
-	VkDescriptorType type,
-	uint32_t count,
-	MVKArgumentBufferMode argBuf,
-	MVKDevice* dev,
-	ImmutableSamplerPlaneInfo planes = ImmutableSamplerPlaneInfo::MaxSize())
-{
+  VkDescriptorType type,
+  uint32_t count,
+  MVKArgumentBufferMode argBuf,
+  MVKDevice* dev,
+  ImmutableSamplerPlaneInfo planes = ImmutableSamplerPlaneInfo::MaxSize()) {
 	if (argBuf == MVKArgumentBufferMode::Off || count == 0)
 		return MVKDescriptorGPULayout::None;
 	bool nativeTAtomic = dev->getPhysicalDevice()->getMetalFeatures()->nativeTextureAtomics;
@@ -870,33 +868,37 @@ static id<MTLTexture> getTexture(const void* src, MVKDescriptorUpdateSourceType 
 	}
 }
 
+/** Either a pointer, for MTLBuffers, or MTLResourceID, for samplers and textures. */
+union MVKGPUResource {
+	uint64_t gpuAddress;
+	MTLResourceID resource;
+};
+static_assert(sizeof(MVKGPUResource) == sizeof(uint64_t));
+static_assert(sizeof(MVKGPUResource) == sizeof(MTLResourceID));
+
 template <MVKArgumentBufferMode Layout> struct MVKArgBufEncoder;
 
 /** Argument buffer encoder for Metal 3 encoding */
 template <> struct MVKArgBufEncoder<MVKArgumentBufferMode::Metal3> {
-	uint64_t* dst;
-	MVKArgBufEncoder(id<MTLArgumentEncoder> enc, char* base): dst(reinterpret_cast<uint64_t*>(base)) {}
-	void advance(size_t stride) { dst = reinterpret_cast<uint64_t*>(reinterpret_cast<char*>(dst) + stride); }
+	MVKGPUResource* dst;
+	MVKArgBufEncoder(id<MTLArgumentEncoder> enc, char* base): dst(reinterpret_cast<MVKGPUResource*>(base)) {}
+	void advance(size_t stride) { dst = reinterpret_cast<MVKGPUResource*>(reinterpret_cast<char*>(dst) + stride); }
 	void* constantData(size_t index) { return reinterpret_cast<char*>(dst) + index; }
-	void setTexture(id<MTLTexture> tex,       size_t index = 0) { dst[index] = [tex gpuResourceID]._impl; }
-	void setSampler(id<MTLSamplerState> samp, size_t index = 0) { dst[index] = [samp gpuResourceID]._impl; }
+	void setTexture(id<MTLTexture> tex,       size_t index = 0) { dst[index].resource = tex.gpuResourceID; }
+	void setSampler(id<MTLSamplerState> samp, size_t index = 0) { dst[index].resource = samp.gpuResourceID; }
 	void setBuffer(id<MTLBuffer> buf, uint64_t offset, size_t index = 0) {
-		dst[index] = [buf gpuAddress] + offset;
+		dst[index].gpuAddress = buf.gpuAddress + offset;
 	}
-	void setNullTexture(size_t index = 0) { dst[index] = 0; }
-	void setNullSampler(size_t index = 0) { dst[index] = 0; }
-	void setNullBuffer (size_t index = 0) { dst[index] = 0; }
-	void setTexture(MVKImageView* img, size_t index = 0) {
-		dst[index] = img ? [img->getMTLTexture() gpuResourceID]._impl : 0;
-	}
-	void setSampler(MVKSampler* samp, size_t index = 0) {
-		dst[index] = samp ? [samp->getMTLSamplerState() gpuResourceID]._impl : 0;
-	}
+	void setNullTexture(size_t index = 0) { dst[index].resource = {}; }
+	void setNullSampler(size_t index = 0) { dst[index].resource = {}; }
+	void setNullBuffer (size_t index = 0) { dst[index].gpuAddress = 0; }
+	void setTexture(MVKImageView* img, size_t index = 0) { setTexture(img ? img->getMTLTexture() : nil, index); }
+	void setSampler(MVKSampler* samp, size_t index = 0) { setSampler(samp ? samp->getMTLSamplerState() : nil, index); }
 	void setBuffer(const VkDescriptorBufferInfo* info, size_t index = 0) {
 		uint64_t addr = 0;
 		if (MVKBuffer* buf = reinterpret_cast<MVKBuffer*>(info->buffer))
-			addr = [buf->getMTLBuffer() gpuAddress] + buf->getMTLBufferOffset() + info->offset;
-		dst[index] = addr;
+			addr = buf->getMTLBuffer().gpuAddress + buf->getMTLBufferOffset() + info->offset;
+		dst[index].gpuAddress = addr;
 	}
 };
 
@@ -1978,7 +1980,7 @@ MVKDescriptorPool* MVKDescriptorPool::Create(MVKDevice* device, const VkDescript
 			ret->_gpuBufferObject = [device->getPhysicalDevice()->getMTLDevice() newBufferWithLength:gpuSize options:MTLResourceStorageModeShared];
 			ret->_gpuBuffer = { static_cast<char*>([ret->_gpuBufferObject contents]), gpuSize };
 			if (argBufMode == MVKArgumentBufferMode::Metal3)
-				ret->_gpuBufferGPUAddress = [ret->_gpuBufferObject gpuAddress];
+				ret->_gpuBufferGPUAddress = ret->_gpuBufferObject.gpuAddress;
 			ret->setMetalObjectLabel(ret->_gpuBufferObject, @"Descriptor set buffer");
 		}
 	}
@@ -2011,11 +2013,13 @@ VkResult MVKDescriptorPool::allocateDescriptorSets(const VkDescriptorSetAllocate
 				if (res != VK_SUCCESS) {
 					// initDescriptorSet may partially fill the descriptor set if it fails, so free that too
 					freeDescriptorSets(dsIdx + 1, pDescriptorSets);
+					std::fill_n(pDescriptorSets, pAllocateInfo->descriptorSetCount, VK_NULL_HANDLE);
 					return res;
 				}
 			} else {
 				if (dsIdx)
 					freeDescriptorSets(dsIdx, pDescriptorSets);
+				std::fill_n(pDescriptorSets, pAllocateInfo->descriptorSetCount, VK_NULL_HANDLE);
 				return VK_ERROR_OUT_OF_POOL_MEMORY;
 			}
 
@@ -2149,10 +2153,10 @@ VkResult MVKDescriptorPool::initDescriptorSet(MVKDescriptorSetLayout* mvkDSL, ui
 					if (binding.hasImmutableSamplers()) {
 						// SPIRV-Cross doesn't use constexpr samplers with argument buffers, so we need to bind them.
 						uint32_t count = binding.descriptorCount;
-						uint64_t* write = reinterpret_cast<uint64_t*>(base + binding.gpuOffset) + descriptorTextureCount(binding.gpuLayout) * count;
+						MTLResourceID* write = reinterpret_cast<MTLResourceID*>(base + binding.gpuOffset) + descriptorTextureCount(binding.gpuLayout) * count;
 						MVKSampler*const* samp = &mvkDSL->immutableSamplers()[binding.immSamplerIndex];
 						for (uint32_t i = 0; i < count; i++)
-							write[i] = [samp[i]->getMTLSamplerState() gpuResourceID]._impl;
+							write[i] = samp[i]->getMTLSamplerState().gpuResourceID;
 					}
 				}
 				break;
