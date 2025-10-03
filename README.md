@@ -15,6 +15,7 @@ The fork is based on upstream MoltenVK but selectively omits certain commits tha
 * Add support for VK_EXT_index_type_uint8 (#2504)
 * Remove CPU path from Uint8 index handling. (#2506)
 * Minor optimization in processing resource residency sets. (#2539)
+* Fix VkExternalMemory*CreateInfo not allowing host memory handle types. (#2622)
 
 
 
