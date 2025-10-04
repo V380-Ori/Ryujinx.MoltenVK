@@ -96,16 +96,6 @@ extern "C" {
 #	define MVK_OS_SIMULATOR			TARGET_OS_SIMULATOR
 #endif
 
-/** Building for Apple Silicon on iOS, tvOS, or macOS platform. */
-#ifndef MVK_APPLE_SILICON
-#	define MVK_APPLE_SILICON    	TARGET_CPU_ARM64
-#endif
-
-/** Building for macOS with support for Apple Silicon. */
-#ifndef MVK_MACOS_APPLE_SILICON
-#	define MVK_MACOS_APPLE_SILICON	(MVK_MACOS && MVK_APPLE_SILICON)
-#endif
-
 /** Metal compiler compiles MSL 2.4 shaders 1.9x faster than MSL >3.0. */
 #ifndef MVK_USE_MSL_2_4
 #	define MVK_USE_MSL_2_4		1
