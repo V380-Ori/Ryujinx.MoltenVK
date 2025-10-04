@@ -455,7 +455,6 @@ protected:
 	friend class MVKDeviceTrackingMixin;
 
 	void propagateDebugName() override {}
-	MTLFeatureSet getMaximalMTLFeatureSet();
     void initMetalFeatures();
 	void initFeatures();
 	void initMTLDevice();
