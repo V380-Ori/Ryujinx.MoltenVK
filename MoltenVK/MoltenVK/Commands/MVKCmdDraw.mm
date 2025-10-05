@@ -223,10 +223,8 @@ void MVKCmdDraw::encode(MVKCommandEncoder* cmdEncoder) {
                 cmdEncoder->getState().offsetZeroDivisorVertexBuffers(*cmdEncoder, stage, pipeline, _firstInstance);
 				id<MTLComputePipelineState> vtxState = pipeline->getTessVertexStageState();
 				if (mtlFeats.nonUniformThreadgroups) {
-					if ( [mtlTessCtlEncoder respondsToSelector: @selector(dispatchThreads:threadsPerThreadgroup:)] ) {
-						[mtlTessCtlEncoder dispatchThreads: MTLSizeMake(_vertexCount, _instanceCount, 1)
-						             threadsPerThreadgroup: MTLSizeMake(vtxState.threadExecutionWidth, 1, 1)];
-					}
+					[mtlTessCtlEncoder dispatchThreads: MTLSizeMake(_vertexCount, _instanceCount, 1)
+					             threadsPerThreadgroup: MTLSizeMake(vtxState.threadExecutionWidth, 1, 1)];
 				} else {
 					[mtlTessCtlEncoder dispatchThreadgroups: MTLSizeMake(mvkCeilingDivide(_vertexCount, vtxState.threadExecutionWidth), _instanceCount, 1)
                                       threadsPerThreadgroup: MTLSizeMake(vtxState.threadExecutionWidth, 1, 1)];
@@ -268,10 +266,8 @@ void MVKCmdDraw::encode(MVKCommandEncoder* cmdEncoder) {
 					wgSize = mvkLeastCommonMultiple(outControlPointCount, sgSize);
 				}
 				if (mtlFeats.nonUniformThreadgroups) {
-					if ( [mtlTessCtlEncoder respondsToSelector: @selector(dispatchThreads:threadsPerThreadgroup:)] ) {
-						[mtlTessCtlEncoder dispatchThreads: MTLSizeMake(tessParams.patchCount * outControlPointCount, 1, 1)
-									 threadsPerThreadgroup: MTLSizeMake(wgSize, 1, 1)];
-					}
+					[mtlTessCtlEncoder dispatchThreads: MTLSizeMake(tessParams.patchCount * outControlPointCount, 1, 1)
+								 threadsPerThreadgroup: MTLSizeMake(wgSize, 1, 1)];
 				} else {
 					[mtlTessCtlEncoder dispatchThreadgroups: MTLSizeMake(mvkCeilingDivide(tessParams.patchCount * outControlPointCount, wgSize), 1, 1)
 									  threadsPerThreadgroup: MTLSizeMake(wgSize, 1, 1)];
@@ -444,10 +440,8 @@ void MVKCmdDrawIndexed::encode(MVKCommandEncoder* cmdEncoder) {
                 cmdEncoder->getState().offsetZeroDivisorVertexBuffers(*cmdEncoder, stage, pipeline, _firstInstance);
 				id<MTLComputePipelineState> vtxState = ibb.mtlIndexType == MTLIndexTypeUInt16 ? pipeline->getTessVertexStageIndex16State() : pipeline->getTessVertexStageIndex32State();
 				if (mtlFeats.nonUniformThreadgroups) {
-					if ( [mtlTessCtlEncoder respondsToSelector: @selector(dispatchThreads:threadsPerThreadgroup:)] ) {
-						[mtlTessCtlEncoder dispatchThreads: MTLSizeMake(_indexCount, _instanceCount, 1)
-						             threadsPerThreadgroup: MTLSizeMake(vtxState.threadExecutionWidth, 1, 1)];
-					}
+					[mtlTessCtlEncoder dispatchThreads: MTLSizeMake(_indexCount, _instanceCount, 1)
+					             threadsPerThreadgroup: MTLSizeMake(vtxState.threadExecutionWidth, 1, 1)];
 				} else {
 					[mtlTessCtlEncoder dispatchThreadgroups: MTLSizeMake(mvkCeilingDivide(_indexCount, vtxState.threadExecutionWidth), _instanceCount, 1)
                                       threadsPerThreadgroup: MTLSizeMake(vtxState.threadExecutionWidth, 1, 1)];
@@ -490,10 +484,8 @@ void MVKCmdDrawIndexed::encode(MVKCommandEncoder* cmdEncoder) {
 					wgSize = mvkLeastCommonMultiple(outControlPointCount, sgSize);
 				}
 				if (mtlFeats.nonUniformThreadgroups) {
-					if ( [mtlTessCtlEncoder respondsToSelector: @selector(dispatchThreads:threadsPerThreadgroup:)] ) {
-						[mtlTessCtlEncoder dispatchThreads: MTLSizeMake(tessParams.patchCount * outControlPointCount, 1, 1)
-									 threadsPerThreadgroup: MTLSizeMake(wgSize, 1, 1)];
-					}
+					[mtlTessCtlEncoder dispatchThreads: MTLSizeMake(tessParams.patchCount * outControlPointCount, 1, 1)
+								 threadsPerThreadgroup: MTLSizeMake(wgSize, 1, 1)];
 				} else {
 					[mtlTessCtlEncoder dispatchThreadgroups: MTLSizeMake(mvkCeilingDivide(tessParams.patchCount * outControlPointCount, wgSize), 1, 1)
 									  threadsPerThreadgroup: MTLSizeMake(wgSize, 1, 1)];
@@ -619,10 +611,8 @@ void MVKCmdDrawIndirect::encodeIndexedIndirect(MVKCommandEncoder* cmdEncoder) {
 	state.bindStructBytes(mtlConvertEncoder, &_drawCount,               3);
 	state.bindBuffer(mtlConvertEncoder, ibb.mtlBuffer, ibb.offset, 4);
 	if (cmdEncoder->getMetalFeatures().nonUniformThreadgroups) {
-		if ( [mtlConvertEncoder respondsToSelector: @selector(dispatchThreads:threadsPerThreadgroup:)] ) {
-			[mtlConvertEncoder dispatchThreads: MTLSizeMake(_drawCount, 1, 1)
-						 threadsPerThreadgroup: MTLSizeMake(mtlConvertState.threadExecutionWidth, 1, 1)];
-		}
+		[mtlConvertEncoder dispatchThreads: MTLSizeMake(_drawCount, 1, 1)
+					 threadsPerThreadgroup: MTLSizeMake(mtlConvertState.threadExecutionWidth, 1, 1)];
 	} else {
 		[mtlConvertEncoder dispatchThreadgroups: MTLSizeMake(mvkCeilingDivide<NSUInteger>(_drawCount, mtlConvertState.threadExecutionWidth), 1, 1)
 						  threadsPerThreadgroup: MTLSizeMake(mtlConvertState.threadExecutionWidth, 1, 1)];
@@ -748,10 +738,8 @@ void MVKCmdDrawIndirect::encode(MVKCommandEncoder* cmdEncoder) {
 				state.bindStructBytes(mtlTessCtlEncoder, &vtxThreadExecWidth,       7);
 				state.bindStructBytes(mtlTessCtlEncoder, &tcWorkgroupSize,          8);
 				if (mtlFeats.nonUniformThreadgroups) {
-					if ( [mtlTessCtlEncoder respondsToSelector: @selector(dispatchThreads:threadsPerThreadgroup:)] ) {
-						[mtlTessCtlEncoder dispatchThreads: MTLSizeMake(_drawCount, 1, 1)
-									 threadsPerThreadgroup: MTLSizeMake(mtlConvertState.threadExecutionWidth, 1, 1)];
-					}
+					[mtlTessCtlEncoder dispatchThreads: MTLSizeMake(_drawCount, 1, 1)
+								 threadsPerThreadgroup: MTLSizeMake(mtlConvertState.threadExecutionWidth, 1, 1)];
 				} else {
 					[mtlTessCtlEncoder dispatchThreadgroups: MTLSizeMake(mvkCeilingDivide<NSUInteger>(_drawCount, mtlConvertState.threadExecutionWidth), 1, 1)
 									  threadsPerThreadgroup: MTLSizeMake(mtlConvertState.threadExecutionWidth, 1, 1)];
@@ -772,10 +760,8 @@ void MVKCmdDrawIndirect::encode(MVKCommandEncoder* cmdEncoder) {
 				state.bindStructBytes(mtlConvertEncoder, &_drawCount,               3);
 				state.bindStructBytes(mtlConvertEncoder, &viewCount,                4);
                 if (mtlFeats.nonUniformThreadgroups) {
-					if ( [mtlConvertEncoder respondsToSelector: @selector(dispatchThreads:threadsPerThreadgroup:)] ) {
-						[mtlConvertEncoder dispatchThreads: MTLSizeMake(_drawCount, 1, 1)
-						             threadsPerThreadgroup: MTLSizeMake(mtlConvertState.threadExecutionWidth, 1, 1)];
-					}
+					[mtlConvertEncoder dispatchThreads: MTLSizeMake(_drawCount, 1, 1)
+					             threadsPerThreadgroup: MTLSizeMake(mtlConvertState.threadExecutionWidth, 1, 1)];
                 } else {
                     [mtlConvertEncoder dispatchThreadgroups: MTLSizeMake(mvkCeilingDivide<NSUInteger>(_drawCount, mtlConvertState.threadExecutionWidth), 1, 1)
                                       threadsPerThreadgroup: MTLSizeMake(mtlConvertState.threadExecutionWidth, 1, 1)];
@@ -857,13 +843,11 @@ void MVKCmdDrawIndirect::encode(MVKCommandEncoder* cmdEncoder) {
 							[cmdEncoder->_mtlRenderEncoder setTessellationFactorBuffer: tcLevelBuff->_mtlBuffer
 																				offset: tcLevelBuff->_offset
 																		instanceStride: 0];
-							if ( [cmdEncoder->_mtlRenderEncoder respondsToSelector: @selector(drawPatches:patchIndexBuffer:patchIndexBufferOffset:indirectBuffer:indirectBufferOffset:)] ) {
-								[cmdEncoder->_mtlRenderEncoder drawPatches: outControlPointCount
-														  patchIndexBuffer: nil
-													patchIndexBufferOffset: 0
-															indirectBuffer: mtlIndBuff
-													  indirectBufferOffset: mtlIndBuffOfst];
-							}
+							[cmdEncoder->_mtlRenderEncoder drawPatches: outControlPointCount
+													  patchIndexBuffer: nil
+												patchIndexBufferOffset: 0
+														indirectBuffer: mtlIndBuff
+												  indirectBufferOffset: mtlIndBuffOfst];
 						}
 
 						mtlIndBuffOfst += sizeof(MTLDrawPatchIndirectArguments);
@@ -1085,10 +1069,8 @@ void MVKCmdDrawIndexedIndirect::encode(MVKCommandEncoder* cmdEncoder, const MVKI
 				state.bindBuffer(mtlConvertEncoder, ibb.mtlBuffer,       ibb.offset,       6);
 				state.bindBuffer(mtlConvertEncoder, ibbTriFan.mtlBuffer, ibbTriFan.offset, 7);
 				if (mtlFeats.nonUniformThreadgroups) {
-					if ( [mtlConvertEncoder respondsToSelector: @selector(dispatchThreads:threadsPerThreadgroup:)] ) {
-						[mtlConvertEncoder dispatchThreads: MTLSizeMake(_drawCount, 1, 1)
-									 threadsPerThreadgroup: MTLSizeMake(mtlConvertState.threadExecutionWidth, 1, 1)];
-					}
+					[mtlConvertEncoder dispatchThreads: MTLSizeMake(_drawCount, 1, 1)
+								 threadsPerThreadgroup: MTLSizeMake(mtlConvertState.threadExecutionWidth, 1, 1)];
 				} else {
 					[mtlConvertEncoder dispatchThreadgroups: MTLSizeMake(mvkCeilingDivide<NSUInteger>(_drawCount, mtlConvertState.threadExecutionWidth), 1, 1)
 									  threadsPerThreadgroup: MTLSizeMake(mtlConvertState.threadExecutionWidth, 1, 1)];
@@ -1175,13 +1157,11 @@ void MVKCmdDrawIndexedIndirect::encode(MVKCommandEncoder* cmdEncoder, const MVKI
 							[cmdEncoder->_mtlRenderEncoder setTessellationFactorBuffer: tcLevelBuff->_mtlBuffer
 																				offset: tcLevelBuff->_offset
 																		instanceStride: 0];
-							if ( [cmdEncoder->_mtlRenderEncoder respondsToSelector: @selector(drawPatches:patchIndexBuffer:patchIndexBufferOffset:indirectBuffer:indirectBufferOffset:)] ) {
-								[cmdEncoder->_mtlRenderEncoder drawPatches: outControlPointCount
-														  patchIndexBuffer: nil
-													patchIndexBufferOffset: 0
-															indirectBuffer: mtlIndBuff
-													  indirectBufferOffset: mtlTempIndBuffOfst];
-							}
+							[cmdEncoder->_mtlRenderEncoder drawPatches: outControlPointCount
+							                          patchIndexBuffer: nil
+							                    patchIndexBufferOffset: 0
+							                            indirectBuffer: mtlIndBuff
+							                      indirectBufferOffset: mtlTempIndBuffOfst];
 						}
 
 						mtlTempIndBuffOfst += sizeof(MTLDrawPatchIndirectArguments);
