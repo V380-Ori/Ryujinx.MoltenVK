@@ -909,10 +909,7 @@ static bool shouldStartNewEncoder(MVKCommandUse prev, MVKCommandUse next) {
 id<MTLComputeCommandEncoder> MVKCommandEncoder::getMTLComputeEncoder(MVKCommandUse cmdUse) {
 	if (!_mtlComputeEncoder || shouldStartNewEncoder(_mtlComputeEncoderUse, cmdUse)) {
 		endCurrentMetalEncoding();
-		if ([_mtlCmdBuffer respondsToSelector:@selector(computeCommandEncoderWithDispatchType:)])
-			_mtlComputeEncoder = [_mtlCmdBuffer computeCommandEncoderWithDispatchType:getDispatchType(cmdUse)];
-		else
-			_mtlComputeEncoder = [_mtlCmdBuffer computeCommandEncoder];
+		_mtlComputeEncoder = [_mtlCmdBuffer computeCommandEncoderWithDispatchType:getDispatchType(cmdUse)];
 		retainIfImmediatelyEncoding(_mtlComputeEncoder);
 		beginMetalComputeEncoding(cmdUse);
 	}
