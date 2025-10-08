@@ -365,6 +365,8 @@ In addition to core *Vulkan* functionality, **MoltenVK**  also supports the foll
 - `VK_EXT_post_depth_coverage`
   - *iOS and macOS, requires family 4 (A11) or better Apple GPU.*
 - `VK_EXT_private_data `
+- `VK_EXT_provoking_vertex`
+  - *Requires a build of MoltenVK with `MVK_USE_METAL_PRIVATE_API` enabled.*
 - `VK_EXT_robustness2`
 - `VK_EXT_sample_locations`
 - `VK_EXT_scalar_block_layout`

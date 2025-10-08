@@ -871,6 +871,7 @@ typedef struct MVKVertexAdjustments {
 	uint8_t mtlIndexType = MTLIndexTypeUInt16;	// Enum must match enum in shader
 	bool isMultiView = false;
 	bool isTriangleFan = false;
+	bool isProvokingVertexLast = false;
 
 	bool needsAdjustment() { return isMultiView || isTriangleFan; }
 } MVKVertexAdjustments;
@@ -928,11 +929,14 @@ void MVKCmdDrawIndexedIndirect::encode(MVKCommandEncoder* cmdEncoder, const MVKI
 	auto& mtlFeats = cmdEncoder->getMetalFeatures();
 	auto& dvcLimits = cmdEncoder->getDeviceProperties().limits;
 
-	MVKVertexAdjustments vtxAdjmts;
+	MVKVertexAdjustments vtxAdjmts{};
 	vtxAdjmts.mtlIndexType = ibb.mtlIndexType;
 	vtxAdjmts.isMultiView = (cmdEncoder->getSubpass()->isMultiview() &&
 							 cmdEncoder->getPhysicalDevice()->canUseInstancingForMultiview());
 	vtxAdjmts.isTriangleFan = pipeline->getVkPrimitiveTopology() == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+#if MVK_USE_METAL_PRIVATE_API
+	vtxAdjmts.isProvokingVertexLast = cmdEncoder->getState().vkGraphics().getProvokingVertexMode() == MTLProvokingVertexModeLast;
+#endif
 
 	// The indirect calls for dispatchThreadgroups:... and drawPatches:... have different formats.
     // We have to convert from the drawIndexedPrimitives:... format to them.

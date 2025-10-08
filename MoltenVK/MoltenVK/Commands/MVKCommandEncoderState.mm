@@ -23,13 +23,15 @@
 #include "MVKRenderPass.h"
 #include "MVKPipeline.h"
 #include "MVKQueryPool.h"
+#include "mvk_datatypes.hpp"
 
 using namespace std;
 
 #if MVK_USE_METAL_PRIVATE_API
 // An extension of the MTLRenderCommandEncoder protocol to declare the setLineWidth: method.
-@protocol MVKMTLRenderCommandEncoderLineWidth <MTLRenderCommandEncoder>
+@protocol MVKMTLRenderCommandEncoder <MTLRenderCommandEncoder>
 - (void)setLineWidth:(float)width;
+- (void)setProvokingVertexMode:(NSUInteger)mode;
 @end
 #endif
 
@@ -1109,6 +1111,7 @@ static constexpr MVKRenderStateFlags FlagsMetalState {
 	MVKRenderStateFlag::StencilReference,
 #if MVK_USE_METAL_PRIVATE_API
 	MVKRenderStateFlag::LineWidth,
+	MVKRenderStateFlag::ProvokingVertexMode,
 #endif
 };
 
@@ -1176,11 +1179,19 @@ void MVKMetalGraphicsCommandEncoderState::bindStateData(
 				[encoder setStencilFrontReferenceValue:_stencilReference.frontFaceValue backReferenceValue:_stencilReference.backFaceValue];
 		}
 #if MVK_USE_METAL_PRIVATE_API
-		if (flags.has(MVKRenderStateFlag::LineWidth) && _lineWidth != data.lineWidth && mvkEncoder.getMVKConfig().useMetalPrivateAPI) {
-			_lineWidth = data.lineWidth;
-			auto lineWidthRendEnc = static_cast<id<MVKMTLRenderCommandEncoderLineWidth>>(encoder);
-			if ([lineWidthRendEnc respondsToSelector:@selector(setLineWidth:)]) {
-				[lineWidthRendEnc setLineWidth:_lineWidth];
+		if (mvkEncoder.getMVKConfig().useMetalPrivateAPI) {
+			auto mvkRendEnc = static_cast<id<MVKMTLRenderCommandEncoder>>(encoder);
+			if (flags.has(MVKRenderStateFlag::LineWidth) && _lineWidth != data.lineWidth) {
+				_lineWidth = data.lineWidth;
+				if ([mvkRendEnc respondsToSelector:@selector(setLineWidth:)]) {
+					[mvkRendEnc setLineWidth:_lineWidth];
+				}
+			}
+			if (flags.has(MVKRenderStateFlag::ProvokingVertexMode) && _provokingVertexMode != data.provokingVertexMode) {
+				_provokingVertexMode = data.provokingVertexMode;
+				if ([mvkRendEnc respondsToSelector:@selector(setProvokingVertexMode:)]) {
+					[mvkRendEnc setProvokingVertexMode:_provokingVertexMode];
+				}
 			}
 		}
 #endif
@@ -1416,6 +1427,7 @@ void MVKMetalGraphicsCommandEncoderState::prepareHelperDraw(
 		MVKRenderStateFlag::DepthWriteEnable,
 		MVKRenderStateFlag::LineWidth,
 		MVKRenderStateFlag::PolygonMode,
+		MVKRenderStateFlag::ProvokingVertexMode,
 		MVKRenderStateFlag::RasterizerDiscardEnable,
 		MVKRenderStateFlag::Scissors,
 		MVKRenderStateFlag::StencilCompareMask,
@@ -1477,6 +1489,17 @@ void MVKMetalGraphicsCommandEncoderState::prepareHelperDraw(
 		_viewports[0] = viewport;
 		[encoder setViewport:mvkMTLViewportFromVkViewport(viewport)];
 	}
+#if MVK_USE_METAL_PRIVATE_API
+	if (mvkEncoder.getMVKConfig().useMetalPrivateAPI) {
+		auto mvkRendEnc = static_cast<id<MVKMTLRenderCommandEncoder>>(encoder);
+		if (_provokingVertexMode != 0) {
+			_provokingVertexMode = MTLProvokingVertexModeFirst;
+			if ([mvkEncoder._mtlRenderEncoder respondsToSelector:@selector(setProvokingVertexMode:)]) {
+				[mvkRendEnc setProvokingVertexMode:_provokingVertexMode];
+			}
+		}
+	}
+#endif
 	mvkEncoder._occlusionQueryState.prepareHelperDraw(encoder, &mvkEncoder);
 }
 

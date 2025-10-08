@@ -284,13 +284,15 @@ typedef struct MVKVtxAdj {
 	MTLIndexType idxType;
 	bool isMultiView;
 	bool isTriFan;
+	bool isProvokingVertexLast;
 } MVKVtxAdj;
 
 // Populates triangle vertex indexes for a triangle fan.
 template<typename T>
 static inline void populateTriIndxsFromTriFan(device T* triIdxs,
                                               constant T* triFanIdxs,
-                                              uint32_t triFanIdxCnt) {
+                                              uint32_t triFanIdxCnt,
+                                              constant MVKVtxAdj& vtxAdj) {
 	T primRestartSentinel = (T)0xFFFFFFFF;
 	uint32_t triIdxIdx = 0;
 	uint32_t triFanBaseIdx = 0;
@@ -315,9 +317,9 @@ static inline void populateTriIndxsFromTriFan(device T* triIdxs,
 			triFanIdxIdx = triFanBaseIdx + 2;
 		} else {
 			// Provoking vertex is 1 in triangle fan but 0 in triangle list
-			triIdxs[triIdxIdx++] = triIdx1;
-			triIdxs[triIdxIdx++] = triIdx2;
-			triIdxs[triIdxIdx++] = triIdx0;
+			triIdxs[triIdxIdx++] = vtxAdj.isProvokingVertexLast ? triIdx0 : triIdx1;
+			triIdxs[triIdxIdx++] = vtxAdj.isProvokingVertexLast ? triIdx1 : triIdx2;
+			triIdxs[triIdxIdx++] = vtxAdj.isProvokingVertexLast ? triIdx2 : triIdx0;
 			triFanIdxIdx++;
 		}
 	}
@@ -379,12 +381,14 @@ kernel void cmdDrawIndexedIndirectConvertBuffers(const device char* srcBuff [[bu
 			case MTLIndexTypeUInt16:
 				populateTriIndxsFromTriFan(&((device uint16_t*)triIdxs)[dst.indexStart],
 				                           &((constant uint16_t*)triFanIdxs)[src.indexStart],
-				                           src.indexCount);
+				                           src.indexCount,
+				                           vtxAdj);
 				break;
 			case MTLIndexTypeUInt32:
 				populateTriIndxsFromTriFan(&((device uint32_t*)triIdxs)[dst.indexStart],
 				                           &((constant uint32_t*)triFanIdxs)[src.indexStart],
-				                           src.indexCount);
+				                           src.indexCount,
+				                           vtxAdj);
 				break;
 		}
 	}

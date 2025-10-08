@@ -4136,6 +4136,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdSetProvokingVertexModeEXT(
     VkProvokingVertexModeEXT                    provokingVertexMode) {
 
     MVKTraceVulkanCallStart();
+    MVKAddCmd(SetProvokingVertexMode, commandBuffer, provokingVertexMode);
     MVKTraceVulkanCallEnd();
 }
 

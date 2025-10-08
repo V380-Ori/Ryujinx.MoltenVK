@@ -210,6 +210,9 @@ struct MVKVulkanGraphicsCommandEncoderState: public MVKVulkanCommonEncoderState 
 	uint32_t getPatchControlPoints() const {
 		return pickRenderState(MVKRenderStateFlag::PatchControlPoints).patchControlPoints;
 	}
+	bool getProvokingVertexMode() const {
+		return pickRenderState(MVKRenderStateFlag::ProvokingVertexMode).provokingVertexMode;
+	}
 
 	/** Bind the given descriptor sets, placing their bindings into `_descriptorSetBindings`. */
 	void bindDescriptorSets(MVKPipelineLayout* layout,
@@ -329,6 +332,7 @@ struct MVKMetalGraphicsCommandEncoderStateQuickReset {
 	uint8_t _cullMode;
 	uint8_t _frontFace;
 	MVKPolygonMode _polygonMode;
+	uint8_t _provokingVertexMode;
 
 	// Memset 0 to here to clear.
 	// DO NOT memset sizeof(*this), or you'll clear padding, which is used by subclasses.
