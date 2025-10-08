@@ -97,19 +97,15 @@ uint8_t MVKMTLDeviceCapabilities::getHighestMacGPU() const {
 
 MVKMTLDeviceCapabilities::MVKMTLDeviceCapabilities(id<MTLDevice> mtlDev) {
 	mvkClear(this);
+	supportsMetal3 = supportsGPUFam(Metal3, mtlDev);
 	supportsApple1 = supportsGPUFam(Apple1, mtlDev);
 	supportsApple2 = supportsGPUFam(Apple2, mtlDev);
 	supportsApple3 = supportsGPUFam(Apple3, mtlDev);
 	supportsApple4 = supportsGPUFam(Apple4, mtlDev);
 	supportsApple5 = supportsGPUFam(Apple5, mtlDev);
 	supportsApple6 = supportsGPUFam(Apple6, mtlDev);
-#if MVK_XCODE_13
 	supportsApple7 = supportsGPUFam(Apple7, mtlDev);
-#endif
-#if MVK_XCODE_14
 	supportsApple8 = supportsGPUFam(Apple8, mtlDev);
-	supportsMetal3 = supportsGPUFam(Metal3, mtlDev);
-#endif
 #if MVK_XCODE_15 && !MVK_TVOS && !MVK_VISIONOS
 	supportsApple9 = supportsGPUFam(Apple9, mtlDev);
 #endif
@@ -121,23 +117,17 @@ MVKMTLDeviceCapabilities::MVKMTLDeviceCapabilities(id<MTLDevice> mtlDev) {
 
 	isAppleGPU = supportsApple1;
 
-#if MVK_XCODE_14_3 || (MVK_MACOS && !MVK_MACCAT)
 	if ([mtlDev respondsToSelector: @selector(supportsBCTextureCompression)]) {
 		supportsBCTextureCompression = mtlDev.supportsBCTextureCompression;
 	}
-#else
-	supportsBCTextureCompression = supportsMac1;
-#endif
-#if MVK_MACOS
-	supportsDepth24Stencil8 = mtlDev.isDepth24Stencil8PixelFormatSupported;
-#endif
-#if MVK_XCODE_14 || !MVK_TVOS
 	if ([mtlDev respondsToSelector: @selector(supports32BitFloatFiltering)]) {
 		supports32BitFloatFiltering = mtlDev.supports32BitFloatFiltering;
 	}
 	if ([mtlDev respondsToSelector: @selector(supports32BitMSAA)]) {
 		supports32BitMSAA = mtlDev.supports32BitMSAA;
 	}
+#if MVK_MACOS
+	supportsDepth24Stencil8 = mtlDev.isDepth24Stencil8PixelFormatSupported;
 #endif
 }
 
@@ -2336,7 +2326,7 @@ void MVKPhysicalDevice::initMTLDevice() {
 	// Apple Silicon will respond false to isLowPower, but never hits it.
 	_hasUnifiedMemory = _mtlDevice.hasUnifiedMemory;
 
-#if MVK_XCODE_14_3 && !MVK_MACCAT
+#if !MVK_MACCAT
 	if ([_mtlDevice respondsToSelector: @selector(setShouldMaximizeConcurrentCompilation:)]) {
 		[_mtlDevice setShouldMaximizeConcurrentCompilation: getMVKConfig().shouldMaximizeConcurrentCompilation];
 		MVKLogInfoIf(getMVKConfig().debugMode, "maximumConcurrentCompilationTaskCount %lu", _mtlDevice.maximumConcurrentCompilationTaskCount);
@@ -2490,12 +2480,10 @@ void MVKPhysicalDevice::initMetalFeatures() {
 	} else {
 		_metalFeatures.maxPerStageTextureCount = 31;
 	}
-#if MVK_XCODE_13
 	if ( mvkOSVersionIsAtLeast(15.0) ) {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion2_4;
 	}
-#endif
-#if MVK_XCODE_14 && !MVK_USE_MSL_2_4
+#if !MVK_USE_MSL_2_4
 	if ( mvkOSVersionIsAtLeast(16.0) ) {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion3_0;
 	}
@@ -2505,10 +2493,12 @@ void MVKPhysicalDevice::initMetalFeatures() {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion3_1;
 	}
 #endif
-#if MVK_XCODE_16 && !MVK_USE_MSL_2_4
+#if MVK_XCODE_16
+#if !MVK_USE_MSL_2_4
 	if ( mvkOSVersionIsAtLeast(18.0) ) {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion3_2;
 	}
+#endif
 #if MVK_VISIONOS
     if ( mvkOSVersionIsAtLeast(2.0) ) {
         _metalFeatures.mslVersionEnum = MTLLanguageVersion3_2;
@@ -2560,12 +2550,10 @@ void MVKPhysicalDevice::initMetalFeatures() {
 		_metalFeatures.placementHeaps = useMTLHeap;
 		_metalFeatures.renderWithoutAttachments = true;
 	}
-#if MVK_XCODE_13
 	if ( mvkOSVersionIsAtLeast(12.0) ) {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion2_4;
 	}
-#endif
-#if MVK_XCODE_14 && !MVK_USE_MSL_2_4
+#if !MVK_USE_MSL_2_4
 	if ( mvkOSVersionIsAtLeast(13.0) ) {
 		_metalFeatures.mslVersionEnum = MTLLanguageVersion3_0;
 	}
@@ -2615,7 +2603,6 @@ void MVKPhysicalDevice::initMetalFeatures() {
 	_metalFeatures.rasterOrderGroups = _mtlDevice.areRasterOrderGroupsSupported;
 	_metalFeatures.pullModelInterpolation = _mtlDevice.supportsPullModelInterpolation;
 
-#if (MVK_MACOS && !MVK_MACCAT) || (MVK_MACCAT && MVK_XCODE_14) || MVK_IOS
 	// Both current and deprecated properties are retrieved and OR'd together, due to a
 	// Metal bug that, in some environments, returned true for one and false for the other.
 	bool bcProp1 = false;
@@ -2627,7 +2614,6 @@ void MVKPhysicalDevice::initMetalFeatures() {
 		bcProp2 = _mtlDevice.areBarycentricCoordsSupported;
 	}
 	_metalFeatures.shaderBarycentricCoordinates = bcProp1 || bcProp2;
-#endif
 
     _metalFeatures.maxMTLBufferSize = _mtlDevice.maxBufferLength;
 
@@ -2693,16 +2679,14 @@ void MVKPhysicalDevice::initMetalFeatures() {
 			setMSLVersion(3, 1);
 			break;
 #endif
-#if MVK_XCODE_14 && !MVK_USE_MSL_2_4
+#if !MVK_USE_MSL_2_4
 		case MTLLanguageVersion3_0:
 			setMSLVersion(3, 0);
 			break;
 #endif
-#if MVK_XCODE_13
 		case MTLLanguageVersion2_4:
 			setMSLVersion(2, 4);
 			break;
-#endif
 		case MTLLanguageVersion2_3:
 			setMSLVersion(2, 3);
 			break;
@@ -2744,13 +2728,9 @@ void MVKPhysicalDevice::initMetalFeatures() {
 													_properties.vendorID == kIntelVendorId);
 
 	// Argument encoders are not needed if Metal 3 plus Tier 2 argument buffers.
-#if MVK_XCODE_14
 	_metalFeatures.needsArgumentBufferEncoders = !(mvkOSVersionIsAtLeast(13.0, 16.0, 1.0) &&
 													supportsMTLGPUFamily(Metal3) &&
 													_metalFeatures.argumentBuffersTier >= MTLArgumentBuffersTier2);
-#else
-	_metalFeatures.needsArgumentBufferEncoders = true;
-#endif
 
 	_isUsingMetalArgumentBuffers = _metalFeatures.descriptorSetArgumentBuffers && getMVKConfig().useMetalArgumentBuffers;
 
@@ -3598,17 +3578,11 @@ void MVKPhysicalDevice::initExtensions() {
 		pWritableExtns->vk_EXT_image_2d_view_of_3d.enabled = false;
 	}
 
-    // The relevant functions are not available if not built with Xcode 14.
-#if MVK_XCODE_14
     // gpuAddress requires Tier2 argument buffer support (per feedback from Apple engineers).
     if (_metalFeatures.argumentBuffersTier < MTLArgumentBuffersTier2) {
 		pWritableExtns->vk_KHR_buffer_device_address.enabled = false;
 		pWritableExtns->vk_EXT_buffer_device_address.enabled = false;
 	}
-#else
-    pWritableExtns->vk_KHR_buffer_device_address.enabled = false;
-    pWritableExtns->vk_EXT_buffer_device_address.enabled = false;
-#endif
 
 #if MVK_MACOS
 	if (!supportsMTLGPUFamily(Apple5)) {
@@ -3725,18 +3699,12 @@ void MVKPhysicalDevice::logGPUInfo() {
 	logMsg += "\n\tMetal Shading Language %s";
 	logMsg += "\n\tsupports the following GPU Features:";
 
-#if MVK_XCODE_14
 	if (supportsMTLGPUFamily(Metal3)) { logMsg += "\n\t\tGPU Family Metal 3"; }
-#endif
 #if MVK_XCODE_15 && (MVK_IOS || MVK_MACOS)
 	if (supportsMTLGPUFamily(Apple9)) { logMsg += "\n\t\tGPU Family Apple 9"; } else
 #endif
-#if MVK_XCODE_14 || (MVK_IOS && MVK_XCODE_13)
 	if (supportsMTLGPUFamily(Apple8)) { logMsg += "\n\t\tGPU Family Apple 8"; } else
-#endif
-#if MVK_IOS || MVK_MACOS
 	if (supportsMTLGPUFamily(Apple7)) { logMsg += "\n\t\tGPU Family Apple 7"; } else
-#endif
 	if (supportsMTLGPUFamily(Apple6)) { logMsg += "\n\t\tGPU Family Apple 6"; } else
 	if (supportsMTLGPUFamily(Apple5)) { logMsg += "\n\t\tGPU Family Apple 5"; } else
 	if (supportsMTLGPUFamily(Apple4)) { logMsg += "\n\t\tGPU Family Apple 4"; } else
@@ -4974,11 +4942,9 @@ MTLCompileOptions* MVKDevice::getMTLCompileOptions(uint32_t fpFastMathFlags,
 		mtlCompOpt.fastMathEnabled = mvkAreAllFlagsEnabled(fpFastMathFlags, mvk::kSPIRVFPFastMathModesSupported);
 	}
 
-#if MVK_XCODE_14
 	if ([mtlCompOpt respondsToSelector: @selector(optimizationLevel)]) {
 		mtlCompOpt.optimizationLevel = MTLLibraryOptimizationLevelDefault;
 	}
-#endif
 
 	mtlCompOpt.preserveInvariance = preserveInvariance;
 	return [mtlCompOpt autorelease];
