@@ -722,6 +722,11 @@ void MVKPhysicalDevice::getFeatures(VkPhysicalDeviceFeatures2* features) {
 				extFeatures->sampler2DViewOf3D = _metalFeatures.placementHeaps;
 				break;
 			}
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NON_SEAMLESS_CUBE_MAP_FEATURES_EXT: {
+				auto* nonSeamlessFeatures = (VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT*)next;
+				nonSeamlessFeatures->nonSeamlessCubeMap = getMVKConfig().useMetalPrivateAPI;
+				break;
+			}
 			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT: {
 				auto* provokingVertexFeatures = (VkPhysicalDeviceProvokingVertexFeaturesEXT*)next;
 				provokingVertexFeatures->provokingVertexLast = getMVKConfig().useMetalPrivateAPI;
@@ -3610,6 +3615,7 @@ void MVKPhysicalDevice::initExtensions() {
 #if MVK_USE_METAL_PRIVATE_API
 	if (!getMVKConfig().useMetalPrivateAPI) {
 #endif
+		pWritableExtns->vk_EXT_non_seamless_cube_map.enabled = false;
 		pWritableExtns->vk_EXT_provoking_vertex.enabled = false;
 #if MVK_USE_METAL_PRIVATE_API
 	}
