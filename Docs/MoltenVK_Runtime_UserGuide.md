@@ -353,6 +353,8 @@ In addition to core *Vulkan* functionality, **MoltenVK**  also supports the foll
 - `VK_EXT_image_robustness`
 - `VK_EXT_inline_uniform_block`
 - `VK_EXT_layer_settings`
+- `VK_EXT_legacy_dithering`
+  - *Requires a build of MoltenVK with `MVK_USE_METAL_PRIVATE_API` enabled.*
 - `VK_EXT_line_rasterization`
 - `VK_EXT_load_store_op_none`
 - `VK_EXT_memory_budget`

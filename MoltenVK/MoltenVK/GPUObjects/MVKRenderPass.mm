@@ -27,6 +27,13 @@
 
 using namespace std;
 
+#if MVK_USE_METAL_PRIVATE_API
+// An extension of the MTLRenderPassDescriptor interface to declare additional private APIs.
+@interface MTLRenderPassDescriptor (MoltenVK)
+- (void)setDitherEnabled:(BOOL)enabled;
+@end
+#endif
+
 
 #pragma mark -
 #pragma mark MVKRenderSubpass
@@ -284,6 +291,14 @@ void MVKRenderSubpass::populateMTLRenderPassDescriptor(MTLRenderPassDescriptor* 
 			mtlColorAttDesc.storeAction = MTLStoreActionDontCare;
 		}
 	}
+
+#if MVK_USE_METAL_PRIVATE_API
+	if (getMVKConfig().useMetalPrivateAPI) {
+		if ([mtlRPDesc respondsToSelector: @selector(setDitherEnabled:)]) {
+			[mtlRPDesc setDitherEnabled:_isDitheringEnabled];
+		}
+	}
+#endif
 }
 
 void MVKRenderSubpass::encodeStoreActions(MVKCommandEncoder* cmdEncoder,
@@ -589,6 +604,7 @@ MVKRenderSubpass::MVKRenderSubpass(MVKRenderPass* renderPass, const VkSubpassDes
 
 	_renderPass = renderPass;
 	_subpassIndex = (uint32_t)_renderPass->_subpasses.size();
+	_isDitheringEnabled = mvkIsAnyFlagEnabled(pCreateInfo->flags, VK_SUBPASS_DESCRIPTION_ENABLE_LEGACY_DITHERING_BIT_EXT);
 	_pipelineRenderingCreateInfo.viewMask = pCreateInfo->viewMask;
 
 	// Add attachments
@@ -653,6 +669,7 @@ MVKRenderSubpass::MVKRenderSubpass(MVKRenderPass* renderPass,
 								   uint32_t viewMask) {
 	_renderPass = renderPass;
 	_subpassIndex = (uint32_t)_renderPass->_subpasses.size();
+	_isDitheringEnabled = mvkIsAnyFlagEnabled(pCreateInfo->flags, VK_SUBPASS_DESCRIPTION_ENABLE_LEGACY_DITHERING_BIT_EXT);
 	_pipelineRenderingCreateInfo.viewMask = viewMask;
 
 	// Add attachments
@@ -718,6 +735,7 @@ MVKRenderSubpass::MVKRenderSubpass(MVKRenderPass* renderPass, const VkRenderingI
 	_isDynamicRendering = true;
 	_renderPass = renderPass;
 	_subpassIndex = (uint32_t)_renderPass->_subpasses.size();
+	_isDitheringEnabled = mvkIsAnyFlagEnabled(pRenderingInfo->flags, VK_RENDERING_ENABLE_LEGACY_DITHERING_BIT_EXT);
 	_pipelineRenderingCreateInfo.viewMask = pRenderingInfo->viewMask;
 
 	_depthAttachment = _unusedAttachment;
