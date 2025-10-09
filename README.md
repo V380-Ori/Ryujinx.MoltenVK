@@ -16,6 +16,7 @@ The fork is based on upstream MoltenVK but selectively omits certain commits tha
 * Remove CPU path from Uint8 index handling. (#2506)
 * Minor optimization in processing resource residency sets. (#2539)
 * Fix VkExternalMemory*CreateInfo not allowing host memory handle types. (#2622)
+* Add support for disabling primitive restart using private APIs. (#2632)
 
 
 
