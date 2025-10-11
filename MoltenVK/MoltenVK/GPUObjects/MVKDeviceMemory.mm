@@ -351,7 +351,6 @@ MVKDeviceMemory::MVKDeviceMemory(MVKDevice* device,
 
 	// "Dedicated" means this memory can only be used for this image or buffer.
 	if (dedicatedImage) {
-#if MVK_MACOS
 		if (!isAppleGPU() && isMemoryHostCoherent()) {
 			if (!((MVKImage*)dedicatedImage)->_isLinear) {
 				setConfigurationResult(reportError(VK_ERROR_OUT_OF_DEVICE_MEMORY, "vkAllocateMemory(): Host-coherent VkDeviceMemory objects cannot be associated with optimal-tiling images."));
@@ -360,7 +359,6 @@ MVKDeviceMemory::MVKDeviceMemory(MVKDevice* device,
 				setConfigurationResult(reportError(VK_ERROR_OUT_OF_DEVICE_MEMORY, "vkAllocateMemory(): Could not allocate a host-coherent VkDeviceMemory of size %llu bytes. The maximum memory-aligned size of a host-coherent VkDeviceMemory is %llu bytes.", _allocationSize, getMetalFeatures().maxMTLBufferSize));
 			}
 		}
-#endif
         for (auto& memoryBinding : ((MVKImage*)dedicatedImage)->_memoryBindings) {
             _imageMemoryBindings.push_back(memoryBinding);
         }
