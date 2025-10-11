@@ -97,8 +97,10 @@ extern "C" {
 #endif
 
 /** Metal compiler compiles MSL 2.4 shaders 1.9x faster than MSL >3.0. */
+#if MVK_MACOS
 #ifndef MVK_USE_MSL_2_4
 #	define MVK_USE_MSL_2_4		1
+#endif
 #endif
 
 /** Building with Xcode versions. */
