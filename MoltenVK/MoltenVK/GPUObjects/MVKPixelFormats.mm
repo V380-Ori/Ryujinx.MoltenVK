@@ -54,11 +54,6 @@ using namespace std;
 #   define MTLPixelFormatBGRG422                    MTLPixelFormatInvalid
 #endif
 
-#if !MVK_XCODE_15
-#   define MTLVertexFormatFloatRG11B10              MTLVertexFormatInvalid
-#   define MTLVertexFormatFloatRGB9E5               MTLVertexFormatInvalid
-#endif
-
 
 #pragma mark -
 #pragma mark MVKPixelFormats
@@ -627,7 +622,7 @@ MTLTextureUsage MVKPixelFormats::getMTLTextureUsage(VkImageUsageFlags vkImageUsa
 		mvkEnableFlags(mtlUsage, MTLTextureUsageShaderWrite);
 	}
 
-#if MVK_XCODE_15 && !MVK_USE_MSL_2_4
+#if !MVK_USE_MSL_2_4
 	if (supportAtomics && (mtlFormat == MTLPixelFormatR32Uint || mtlFormat == MTLPixelFormatR32Sint)) {
 		mvkEnableFlags(mtlUsage, MTLTextureUsageShaderAtomic);
 	}
