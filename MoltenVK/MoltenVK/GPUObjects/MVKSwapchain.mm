@@ -514,6 +514,10 @@ void MVKSwapchain::initCAMetalLayer(const VkSwapchainCreateInfoKHR* pCreateInfo,
 		mtlLayer.opaque = pCreateInfo->compositeAlpha == VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	}
 
+#if MVK_AVOID_DIRECT_PRESENTATION
+	mtlLayer.opaque = false;
+#endif
+
 	switch (pCreateInfo->imageColorSpace) {
 		case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
 			mtlLayer.colorspaceNameMVK = kCGColorSpaceSRGB;
