@@ -14,8 +14,8 @@ jobs:
   build:
     strategy:
       matrix:
-        # Primary build on macOS 15 and its default Xcode version
-        os: [ "macos-15" ]
+        # Primary build on macOS 26 and its default Xcode version
+        os: [ "macos-26" ]
         platform: [ "macos", "ios" ]
         upload_artifacts: [ true ]
         select_xcode: [ false ]
