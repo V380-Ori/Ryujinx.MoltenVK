@@ -107,11 +107,11 @@ extern "C" {
  * On macOS when presentation mode changes from Composited to Direct,
  * there's a chance of WindowServer crash.
  *
- * Enabled by default.
+ * Disabled by default.
  */
 #if MVK_MACOS
 #ifndef MVK_AVOID_DIRECT_PRESENTATION
-#	define MVK_AVOID_DIRECT_PRESENTATION		1
+#	define MVK_AVOID_DIRECT_PRESENTATION		0
 #endif
 #endif
 
