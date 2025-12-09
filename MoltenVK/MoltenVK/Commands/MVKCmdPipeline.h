@@ -142,8 +142,6 @@ public:
 
 	void encode(MVKCommandEncoder* cmdEncoder) override;
 
-	~MVKCmdBindDescriptorSetsStatic() override;
-
 protected:
 	void encode(MVKCommandEncoder* cmdEncoder, MVKArrayRef<uint32_t> dynamicOffsets);
 
@@ -199,6 +197,7 @@ public:
 
 protected:
 	MVKCommandVector<char> _pushConstants;
+	MVKPipelineLayout* _pipelineLayout = nullptr;
 	VkShaderStageFlags _stageFlags;
 	uint32_t _offset;
 };
