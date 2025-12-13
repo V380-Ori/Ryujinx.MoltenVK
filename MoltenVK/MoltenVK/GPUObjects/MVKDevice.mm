@@ -595,7 +595,7 @@ void MVKPhysicalDevice::getFeatures(VkPhysicalDeviceFeatures2* features) {
 				portabilityFeatures->shaderSampleRateInterpolationFunctions = _metalFeatures.pullModelInterpolation;
 				portabilityFeatures->tessellationIsolines = false;
 				portabilityFeatures->tessellationPointMode = false;
-				portabilityFeatures->triangleFans = true;
+				portabilityFeatures->triangleFans = false;
 				portabilityFeatures->vertexAttributeAccessBeyondStride = true;	// Costs additional buffers. Should make configuration switch.
 				break;
 			}
