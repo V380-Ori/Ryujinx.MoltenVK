@@ -7,7 +7,6 @@ The fork is based on upstream MoltenVK but selectively omits certain commits tha
 
 ### Commits Removed:
 * Add support for VK_EXT_external_memory_host extension. (#1854)
-* Add VK_EXT_external_memory_metal (#2314)
 * Fix race condition when VkImage destroyed while used by descriptor. (#2320)
 * Avoid calling useResource on resources in argument buffers (#2402)
 * MVKCmdWaitEvents: end current encoder before encodeWait (#2422)
@@ -15,7 +14,6 @@ The fork is based on upstream MoltenVK but selectively omits certain commits tha
 * Add support for VK_EXT_index_type_uint8 (#2504)
 * Remove CPU path from Uint8 index handling. (#2506)
 * Minor optimization in processing resource residency sets. (#2539)
-* Fix VkExternalMemory*CreateInfo not allowing host memory handle types. (#2622)
 * Add support for disabling primitive restart using private APIs. (#2632)
 
 
