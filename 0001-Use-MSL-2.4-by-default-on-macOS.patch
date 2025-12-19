@@ -1,0 +1,209 @@
+From da7ca330d1485a7d4bd7bd6ee280e492c8491c61 Mon Sep 17 00:00:00 2001
+From: V380-Ori <infiniteloop0finsanity@gmail.com>
+Date: Fri, 19 Dec 2025 16:53:00 +0200
+Subject: [PATCH] Use MSL 2.4 by default on macOS.
+
+---
+ Common/MVKCommonEnvironment.h                 | 15 ++++++++++++++
+ .../Commands/MVKCommandEncoderState.h         | 14 +++++++++++++
+ .../Commands/MVKCommandEncoderState.mm        | 20 +++++++++++++++++++
+ MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm     |  9 +++++++++
+ MoltenVK/MoltenVK/GPUObjects/MVKImage.mm      |  4 ++++
+ MoltenVK/MoltenVK/Layers/MVKExtensions.def    |  2 ++
+ 6 files changed, 64 insertions(+)
+
+diff --git a/Common/MVKCommonEnvironment.h b/Common/MVKCommonEnvironment.h
+index ec7ab835..7b7314d8 100644
+--- a/Common/MVKCommonEnvironment.h
++++ b/Common/MVKCommonEnvironment.h
+@@ -86,6 +86,21 @@ extern "C" {
+ #	define MVK_OS_SIMULATOR			TARGET_OS_SIMULATOR
+ #endif
+ 
++/**
++ * Set Metal Shading Language Version to 2.4 on macOS.
++ *
++ * Metal compiler compiles MSL 2.4 shaders 1.9x faster than MSL >3.0.
++ * When enabled, some features will not be available such as:
++ * EXT_extended_dynamic_state*, and native texture atomics.
++ *
++ * Enabled by default.
++ */
++#if MVK_MACOS
++#ifndef MVK_USE_MSL_2_4
++#	define MVK_USE_MSL_2_4			1
++#endif
++#endif
++
+ /** Building with Xcode versions. */
+ #ifndef MVK_XCODE_26
+ #   define MVK_XCODE_26             ((__MAC_OS_X_VERSION_MAX_ALLOWED >= 260000) || \
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.h b/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.h
+index 8cce5c2f..f1afc63e 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.h
++++ b/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.h
+@@ -86,10 +86,16 @@ struct MVKResourceBinder {
+ struct MVKVertexBufferBinder {
+ 	SEL _setBuffer;
+ 	SEL _setOffset;
++#if !MVK_USE_MSL_2_4
+ 	SEL _setBufferDynamic;
+ 	SEL _setOffsetDynamic;
++#endif
+ 	template <typename T> static MVKVertexBufferBinder Create() {
++#if !MVK_USE_MSL_2_4
+ 		return { T::selSetBuffer(), T::selSetOffset(), T::selSetBufferDynamic(), T::selSetOffsetDynamic() };
++#else
++		return { T::selSetBuffer(), T::selSetOffset() };
++#endif
+ 	}
+ 	void setBuffer(id<MTLCommandEncoder> encoder, id<MTLBuffer> buffer, NSUInteger offset, NSUInteger index) const {
+ 		reinterpret_cast<void(*)(id, SEL, id<MTLBuffer>, NSUInteger, NSUInteger)>(objc_msgSend)(encoder, _setBuffer, buffer, offset, index);
+@@ -98,10 +104,18 @@ struct MVKVertexBufferBinder {
+ 		reinterpret_cast<void(*)(id, SEL, NSUInteger, NSUInteger)>(objc_msgSend)(encoder, _setOffset, offset, index);
+ 	}
+ 	void setBufferDynamic(id<MTLCommandEncoder> encoder, id<MTLBuffer> buffer, NSUInteger offset, NSUInteger stride, NSUInteger index) const {
++#if !MVK_USE_MSL_2_4
+ 		reinterpret_cast<void(*)(id, SEL, id<MTLBuffer>, NSUInteger, NSUInteger, NSUInteger)>(objc_msgSend)(encoder, _setBufferDynamic, buffer, offset, stride, index);
++#else
++		assert(0);
++#endif
+ 	}
+ 	void setBufferOffsetDynamic(id<MTLCommandEncoder> encoder, NSUInteger offset, NSUInteger stride, NSUInteger index) const {
++#if !MVK_USE_MSL_2_4
+ 		reinterpret_cast<void(*)(id, SEL, NSUInteger, NSUInteger, NSUInteger)>(objc_msgSend)(encoder, _setOffsetDynamic, offset, stride, index);
++#else
++		assert(0);
++#endif
+ 	}
+ 	enum class Stage {
+ 		Vertex,
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.mm b/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.mm
+index 16fd614d..a200e9c6 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.mm
++++ b/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.mm
+@@ -88,8 +88,10 @@ static void setSampler(id<MTLRenderCommandEncoder> encoder, id<MTLSamplerState>
+ 	static SEL selSetTexture() { return @selector(setVertexTexture:atIndex:); }
+ 	static SEL selSetSampler() { return @selector(setVertexSamplerState:atIndex:); }
+ 	static MVKResourceBinder::UseResource useResource() { return useResourceGraphics; }
++#if !MVK_USE_MSL_2_4
+ 	static SEL selSetBufferDynamic() { return @selector(setVertexBuffer:offset:attributeStride:atIndex:); }
+ 	static SEL selSetOffsetDynamic() { return @selector(setVertexBufferOffset:attributeStride:atIndex:); }
++#endif
+ 	static void setBuffer(id<MTLRenderCommandEncoder> encoder, id<MTLBuffer> buffer, NSUInteger offset, NSUInteger index) {
+ 		[encoder setVertexBuffer:buffer offset:offset atIndex:index];
+ 	}
+@@ -97,10 +99,18 @@ static void setBufferOffset(id<MTLRenderCommandEncoder> encoder, NSUInteger offs
+ 		[encoder setVertexBufferOffset:offset atIndex:index];
+ 	}
+ 	static void setBufferDynamic(id<MTLRenderCommandEncoder> encoder, id<MTLBuffer> buffer, NSUInteger offset, NSUInteger stride, NSUInteger index) {
++#if !MVK_USE_MSL_2_4
+ 		[encoder setVertexBuffer:buffer offset:offset attributeStride:stride atIndex:index];
++#else
++		assert(0);
++#endif
+ 	}
+ 	static void setBufferOffsetDynamic(id<MTLRenderCommandEncoder> encoder, NSUInteger offset, NSUInteger stride, NSUInteger index) {
++#if !MVK_USE_MSL_2_4
+ 		[encoder setVertexBufferOffset:offset attributeStride:stride atIndex:index];
++#else
++		assert(0);
++#endif
+ 	}
+ 	static void setBytes(id<MTLRenderCommandEncoder> encoder, const void* bytes, NSUInteger length, NSUInteger index) {
+ 		[encoder setVertexBytes:bytes length:length atIndex:index];
+@@ -120,8 +130,10 @@ static void setSampler(id<MTLRenderCommandEncoder> encoder, id<MTLSamplerState>
+ 	static SEL selSetTexture() { return @selector(setTexture:atIndex:); }
+ 	static SEL selSetSampler() { return @selector(setSamplerState:atIndex:); }
+ 	static MVKResourceBinder::UseResource useResource() { return useResourceCompute; }
++#if !MVK_USE_MSL_2_4
+ 	static SEL selSetBufferDynamic() { return @selector(setBuffer:offset:attributeStride:atIndex:); }
+ 	static SEL selSetOffsetDynamic() { return @selector(setBufferOffset:attributeStride:atIndex:); }
++#endif
+ 	static void setBuffer(id<MTLComputeCommandEncoder> encoder, id<MTLBuffer> buffer, NSUInteger offset, NSUInteger index) {
+ 		[encoder setBuffer:buffer offset:offset atIndex:index];
+ 	}
+@@ -129,10 +141,18 @@ static void setBufferOffset(id<MTLComputeCommandEncoder> encoder, NSUInteger off
+ 		[encoder setBufferOffset:offset atIndex:index];
+ 	}
+ 	static void setBufferDynamic(id<MTLComputeCommandEncoder> encoder, id<MTLBuffer> buffer, NSUInteger offset, NSUInteger stride, NSUInteger index) {
++#if !MVK_USE_MSL_2_4
+ 		[encoder setBuffer:buffer offset:offset attributeStride:stride atIndex:index];
++#else
++		assert(0);
++#endif
+ 	}
+ 	static void setBufferOffsetDynamic(id<MTLComputeCommandEncoder> encoder, NSUInteger offset, NSUInteger stride, NSUInteger index) {
++#if !MVK_USE_MSL_2_4
+ 		[encoder setBufferOffset:offset attributeStride:stride atIndex:index];
++#else
++		assert(0);
++#endif
+ 	}
+ 	static void setBytes(id<MTLComputeCommandEncoder> encoder, const void* bytes, NSUInteger length, NSUInteger index) {
+ 		[encoder setBytes:bytes length:length atIndex:index];
+diff --git a/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm b/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
+index 31e9c4ae..1fac9a92 100644
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
+@@ -2462,9 +2462,11 @@
+ 	                                 : cfgUseMTLHeap != MVK_CONFIG_USE_MTLHEAP_NEVER);
+ 	_metalFeatures.multisampleArrayTextures = !MVK_TVOS || mvkOSVersionIsAtLeast(16.0);
+ 
++#if !MVK_USE_MSL_2_4
+ 	// Dynamic vertex stride needs to have everything aligned - compiled with support for vertex stride calls, and supported by both runtime OS and GPU.
+ 	_metalFeatures.dynamicVertexStride = mvkOSVersionIsAtLeast(14.0, 17.0, 1.0) && (supportsMTLGPUFamily(Apple4) || supportsMTLGPUFamily(Mac2));
+ 	_metalFeatures.nativeTextureAtomics = mvkOSVersionIsAtLeast(14.0, 17.0, 1.0) && (supportsMTLGPUFamily(Metal3) || supportsMTLGPUFamily(Apple6) || supportsMTLGPUFamily(Mac2));
++#endif
+ 
+ 	if (supportsMTLGPUFamily(Mac2)) {
+ 		_metalFeatures.mtlBufferAlignment = 256;
+@@ -2609,6 +2611,13 @@
+ 		setMSLVersion(2, 3);
+ 	}
+ 
++#if MVK_USE_MSL_2_4
++	if ( mvkOSVersionIsAtLeast(12.0) ) {
++		_metalFeatures.mslVersionEnum = MTLLanguageVersion2_4;
++		setMSLVersion(2, 4);
++	}
++#endif
++
+ 	_metalFeatures.programmableSamplePositions = _mtlDevice.areProgrammableSamplePositionsSupported;
+ 	_metalFeatures.rasterOrderGroups = _mtlDevice.areRasterOrderGroupsSupported;
+ 	_metalFeatures.pullModelInterpolation = _mtlDevice.supportsPullModelInterpolation;
+diff --git a/MoltenVK/MoltenVK/GPUObjects/MVKImage.mm b/MoltenVK/MoltenVK/GPUObjects/MVKImage.mm
+index 36c5b16d..1ce05d24 100644
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKImage.mm
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKImage.mm
+@@ -1219,7 +1219,11 @@ static MTLRegion getMTLRegion(const ImgRgn& imgRgn) {
+ 				((_vkFormat == VK_FORMAT_R32_UINT || _vkFormat == VK_FORMAT_R32_SINT) ||
+ 					(_hasMutableFormat && pixFmts->getViewClass(_vkFormat) == MVKMTLViewClass::Color32 && (getIsValidViewFormat(VK_FORMAT_R32_UINT) || getIsValidViewFormat(VK_FORMAT_R32_SINT))));
+ 
++#if !MVK_USE_MSL_2_4
+ 	_isLinearForAtomics = _shouldSupportAtomics && !getMetalFeatures().nativeTextureAtomics && _arrayLayers == 1 && getImageType() == VK_IMAGE_TYPE_2D;
++#else
++	_isLinearForAtomics = _isLinear && _shouldSupportAtomics;
++#endif
+ 
+ 	_isDepthStencilAttachment = (mvkAreAllFlagsEnabled(pCreateInfo->usage, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ||
+ 								 mvkAreAllFlagsEnabled(pixFmts->getVkFormatProperties3(pCreateInfo->format).optimalTilingFeatures, VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT));
+diff --git a/MoltenVK/MoltenVK/Layers/MVKExtensions.def b/MoltenVK/MoltenVK/Layers/MVKExtensions.def
+index 3ae63cbe..8942ba8c 100644
+--- a/MoltenVK/MoltenVK/Layers/MVKExtensions.def
++++ b/MoltenVK/MoltenVK/Layers/MVKExtensions.def
+@@ -138,9 +138,11 @@ MVK_EXTENSION(EXT_debug_report,                         EXT_DEBUG_REPORT,
+ MVK_EXTENSION(EXT_debug_utils,                          EXT_DEBUG_UTILS,                          INSTANCE, 10.11,  8.0,  1.0)
+ MVK_EXTENSION(EXT_depth_clip_control,                   EXT_DEPTH_CLIP_CONTROL,                   DEVICE,   10.11,  8.0,  1.0)
+ MVK_EXTENSION(EXT_descriptor_indexing,                  EXT_DESCRIPTOR_INDEXING,                  DEVICE,   10.11,  8.0,  1.0)
++#if !MVK_USE_MSL_2_4
+ MVK_EXTENSION(EXT_extended_dynamic_state,               EXT_EXTENDED_DYNAMIC_STATE,               DEVICE,   10.11,  8.0,  1.0)
+ MVK_EXTENSION(EXT_extended_dynamic_state2,              EXT_EXTENDED_DYNAMIC_STATE_2,             DEVICE,   10.11,  8.0,  1.0)
+ MVK_EXTENSION(EXT_extended_dynamic_state3,              EXT_EXTENDED_DYNAMIC_STATE_3,             DEVICE,   10.11,  8.0,  1.0)
++#endif
+ MVK_EXTENSION(EXT_external_memory_host,                 EXT_EXTERNAL_MEMORY_HOST,                 DEVICE,   10.11,  8.0,  1.0)
+ MVK_EXTENSION(EXT_external_memory_metal,                EXT_EXTERNAL_MEMORY_METAL,                DEVICE,   10.11,  8.0,  1.0)
+ MVK_EXTENSION(EXT_fragment_shader_interlock,            EXT_FRAGMENT_SHADER_INTERLOCK,            DEVICE,   10.13, 11.0,  1.0)
+-- 
+2.50.1 (Apple Git-155)
+

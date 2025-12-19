@@ -1,0 +1,29 @@
+From 60bd517cf02dd3f5c781e205fc856cb72c916efe Mon Sep 17 00:00:00 2001
+From: V380-Ori <infiniteloop0finsanity@gmail.com>
+Date: Fri, 19 Dec 2025 17:19:42 +0200
+Subject: [PATCH] Use Metal Private API by default.
+
+---
+ Common/MVKCommonEnvironment.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/Common/MVKCommonEnvironment.h b/Common/MVKCommonEnvironment.h
+index 7b7314d8..af0a93d1 100644
+--- a/Common/MVKCommonEnvironment.h
++++ b/Common/MVKCommonEnvironment.h
+@@ -122,10 +122,10 @@ extern "C" {
+  * extend its functionality by using certain private Metal API calls, but it 
+  * will also disqualify the app from being distributed via Apple App Stores.
+  *
+- * Disabled by default.
++ * Enabled by default.
+  */
+ #ifndef MVK_USE_METAL_PRIVATE_API
+-#	define MVK_USE_METAL_PRIVATE_API		0
++#	define MVK_USE_METAL_PRIVATE_API		1
+ #endif
+ 
+ /** Directive to identify public symbols. */
+-- 
+2.50.1 (Apple Git-155)
+

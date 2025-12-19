@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ "macos-26" ]
+        platform: [ "macos", "ios" ]
+        upload_artifacts: [ true ]
+        select_xcode: [ false ]
+
+      fail-fast: false
+
+    name: 'MoltenVK (Xcode ${{ matrix.xcode }} - ${{ matrix.platform }})'
+    
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        working-directory: ./MoltenVK
+    
+    env:
+      XCODE_DEV_PATH: "/Applications/Xcode_${{ matrix.xcode }}.app/Contents/Developer"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          path: '.'
+
+      - name: Apply patches
+        run: |
+          git apply -v ../*.patch
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: List available Xcode versions
+        run: ls /Applications | grep Xcode
+
+      - name: Select Xcode version
+        if: matrix.select_xcode == true
+        run: sudo xcode-select -switch "${XCODE_DEV_PATH}"
+
+      - name: Prep
+        id: prep
+        run: |
+          echo "Get Xcode version info"
+          XCODE_VERSION="$(xcodebuild -version)"
+          echo "${XCODE_VERSION}"
+          XCODE_VERSION="$(echo "${XCODE_VERSION}" | tr '\t\r\n ' '_')"
+          echo "${XCODE_VERSION}"
+          echo "XCODE_VERSION=${XCODE_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Cache Dependencies
+        id: cache-dependencies
+        if: success() && !(github.event_name == 'push' && contains(github.ref, 'refs/tags/')) # never cache dependencies for pushed tags
+        uses: actions/cache@v3
+        with:
+          path: |
+            MoltenVK/External/build
+            !MoltenVK/External/build/Intermediates
+          key: ${{ runner.os }}-${{ steps.prep.outputs.XCODE_VERSION }}-${{ matrix.platform }}-${{ hashFiles('fetchDependencies','ExternalRevisions/**','ExternalDependencies.xcodeproj/**','Scripts/**') }}
+
+      - name: Fetch Dependencies (Use Built Cache)
+        if: steps.cache-dependencies.outputs.cache-hit == 'true'
+        run: |
+          ./fetchDependencies -v --none
+
+      - name: Fetch Dependencies
+        if: steps.cache-dependencies.outputs.cache-hit != 'true'
+        run: |
+          ./fetchDependencies -v --${{ matrix.platform }}
+
+      - name: Output Dependency Build Logs on Failure
+        if: failure()
+        run: cat "dependenciesbuild.log"
+
+      - name: Build MoltenVK
+        run: |
+          make ${{ matrix.platform }}
+
+      - name: Output MoltenVK Build Logs on Failure
+        if: failure()
+        run: |
+          if [ -f "xcodebuild.log" ]; then
+            cat "xcodebuild.log"
+          fi
+
+      - name: Tar Artifacts
+        if: success() && matrix.upload_artifacts == true
+        run: |
+          rm -rf Package/Release/MoltenVKShaderConverter
+          tar -C Package -s/Release/MoltenVK/ -cvf "MoltenVK-${{ matrix.platform }}.tar" Release/
+
+      - name: Upload Artifacts
+        if: success() && matrix.upload_artifacts == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: "MoltenVK-${{ matrix.platform }}"
+          path: "MoltenVK/MoltenVK-${{ matrix.platform }}.tar"

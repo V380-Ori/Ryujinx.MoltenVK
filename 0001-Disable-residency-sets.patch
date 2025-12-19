@@ -1,0 +1,26 @@
+From 250d0f6ea48b829d28c7f09109b06a6901383d7d Mon Sep 17 00:00:00 2001
+From: V380-Ori <infiniteloop0finsanity@gmail.com>
+Date: Fri, 19 Dec 2025 17:37:09 +0200
+Subject: [PATCH] Disable residency sets.
+
+Fixes flickering in ToTK.
+---
+ MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm b/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
+index 31e9c4ae..9cab3796 100644
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
+@@ -2555,7 +2555,7 @@
+ 		_metalFeatures.maxPerStageTextureCount = 128;
+ 
+ 		_metalFeatures.astcHDRTextures = !MVK_TVOS || mvkOSVersionIsAtLeast(16.0);
+-		_metalFeatures.residencySets = mvkOSVersionIsAtLeast(15.0, 18.0, 2.0);
++		_metalFeatures.residencySets = false;
+ 		_metalFeatures.simdPermute = true;
+ 	}
+ 
+-- 
+2.50.1 (Apple Git-155)
+
