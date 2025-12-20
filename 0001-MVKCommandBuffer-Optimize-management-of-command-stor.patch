@@ -1,0 +1,3107 @@
+From 3875d6ad8fe6cb65e2b4f99d7f068c5c691ddb7a Mon Sep 17 00:00:00 2001
+From: Jan Sikorski <jsikorski@codeweavers.com>
+Date: Sat, 20 Dec 2025 23:44:55 +0200
+Subject: [PATCH] MVKCommandBuffer: Optimize management of command storage.
+
+---
+ MoltenVK/MoltenVK.xcodeproj/project.pbxproj   |   2 -
+ MoltenVK/MoltenVK/Commands/MVKCmdDebug.h      |  12 --
+ MoltenVK/MoltenVK/Commands/MVKCmdDebug.mm     |   2 +-
+ MoltenVK/MoltenVK/Commands/MVKCmdDispatch.h   |   4 -
+ MoltenVK/MoltenVK/Commands/MVKCmdDraw.h       |  19 +-
+ MoltenVK/MoltenVK/Commands/MVKCmdDraw.mm      |  12 +-
+ MoltenVK/MoltenVK/Commands/MVKCmdPipeline.h   |  84 +-------
+ MoltenVK/MoltenVK/Commands/MVKCmdPipeline.mm  |  99 ++++------
+ MoltenVK/MoltenVK/Commands/MVKCmdQueries.h    |  12 --
+ MoltenVK/MoltenVK/Commands/MVKCmdRendering.h  | 182 ++----------------
+ MoltenVK/MoltenVK/Commands/MVKCmdRendering.mm |  78 ++------
+ MoltenVK/MoltenVK/Commands/MVKCmdTransfer.h   |  96 ++-------
+ MoltenVK/MoltenVK/Commands/MVKCmdTransfer.mm  | 169 +++++-----------
+ MoltenVK/MoltenVK/Commands/MVKCommand.h       |  89 ++++++---
+ MoltenVK/MoltenVK/Commands/MVKCommandBuffer.h |  25 ++-
+ .../MoltenVK/Commands/MVKCommandBuffer.mm     |  29 ++-
+ MoltenVK/MoltenVK/Commands/MVKCommandPool.h   |   6 -
+ MoltenVK/MoltenVK/Commands/MVKCommandPool.mm  |  21 +-
+ MoltenVK/MoltenVK/Utility/MVKSmallVector.h    |   9 +-
+ MoltenVK/MoltenVK/Vulkan/vulkan.mm            | 167 +++++-----------
+ 20 files changed, 300 insertions(+), 817 deletions(-)
+
+diff --git a/MoltenVK/MoltenVK.xcodeproj/project.pbxproj b/MoltenVK/MoltenVK.xcodeproj/project.pbxproj
+index 2cfceaa4..b5b93f11 100644
+--- a/MoltenVK/MoltenVK.xcodeproj/project.pbxproj
++++ b/MoltenVK/MoltenVK.xcodeproj/project.pbxproj
+@@ -731,7 +731,6 @@
+ 		A9B51BD6225E986A00AC74D2 /* MVKOSExtensions.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MVKOSExtensions.h; sourceTree = "<group>"; };
+ 		A9B8EE0A1A98D796009C5A02 /* libMoltenVK.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libMoltenVK.a; sourceTree = BUILT_PRODUCTS_DIR; };
+ 		A9C327542AAF8A770025EE79 /* MVKConfigMembers.def */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.h; fileEncoding = 4; path = MVKConfigMembers.def; sourceTree = "<group>"; };
+-		A9C83DCD24533E22003E5261 /* MVKCommandTypePools.def */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.h; fileEncoding = 4; path = MVKCommandTypePools.def; sourceTree = "<group>"; };
+ 		A9C86CB61C55B8350096CAF2 /* MoltenVKShaderConverter.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = MoltenVKShaderConverter.xcodeproj; path = ../MoltenVKShaderConverter/MoltenVKShaderConverter.xcodeproj; sourceTree = "<group>"; };
+ 		A9C96DCE1DDC20C20053187F /* MVKMTLBufferAllocation.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MVKMTLBufferAllocation.h; sourceTree = "<group>"; };
+ 		A9C96DCF1DDC20C20053187F /* MVKMTLBufferAllocation.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = MVKMTLBufferAllocation.mm; sourceTree = "<group>"; };
+@@ -907,7 +906,6 @@
+ 				A94FB77B1C7DFB4800632CA3 /* MVKCommandPool.mm */,
+ 				A95870F61C90D29F009EB096 /* MVKCommandResourceFactory.h */,
+ 				A95870F71C90D29F009EB096 /* MVKCommandResourceFactory.mm */,
+-				A9C83DCD24533E22003E5261 /* MVKCommandTypePools.def */,
+ 				A9C96DCE1DDC20C20053187F /* MVKMTLBufferAllocation.h */,
+ 				A9C96DCF1DDC20C20053187F /* MVKMTLBufferAllocation.mm */,
+ 				A9E4B7881E1D8AF10046A4CE /* MVKMTLResourceBindings.h */,
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCmdDebug.h b/MoltenVK/MoltenVK/Commands/MVKCmdDebug.h
+index 798f1f27..1362ccd8 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCmdDebug.h
++++ b/MoltenVK/MoltenVK/Commands/MVKCmdDebug.h
+@@ -46,10 +46,6 @@ class MVKCmdDebugMarkerBegin : public MVKCmdDebugMarker {
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ };
+ 
+ 
+@@ -62,10 +58,6 @@ public:
+ 	VkResult setContent(MVKCommandBuffer* cmdBuff);
+ 
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ };
+ 
+ 
+@@ -76,10 +68,6 @@ class MVKCmdDebugMarkerInsert : public MVKCmdDebugMarker {
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ };
+ 
+ 
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCmdDebug.mm b/MoltenVK/MoltenVK/Commands/MVKCmdDebug.mm
+index 3cd74720..863f8008 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCmdDebug.mm
++++ b/MoltenVK/MoltenVK/Commands/MVKCmdDebug.mm
+@@ -28,7 +28,7 @@
+ 									   const float color[4]) {
+ 	[_markerName release];
+ 	_markerName = [[NSString alloc] initWithUTF8String: pMarkerName];	// retained
+-
++	cmdBuff->destroyOnReset(this);
+ 	return VK_SUCCESS;
+ }
+ 
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCmdDispatch.h b/MoltenVK/MoltenVK/Commands/MVKCmdDispatch.h
+index 3ff4c93e..e8fd5c46 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCmdDispatch.h
++++ b/MoltenVK/MoltenVK/Commands/MVKCmdDispatch.h
+@@ -36,8 +36,6 @@ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ 	uint32_t _baseGroupX;
+ 	uint32_t _baseGroupY;
+ 	uint32_t _baseGroupZ;
+@@ -58,8 +56,6 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ 	id<MTLBuffer> _mtlIndirectBuffer;
+ 	VkDeviceSize _mtlIndirectBufferOffset;
+ };
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCmdDraw.h b/MoltenVK/MoltenVK/Commands/MVKCmdDraw.h
+index bc7751ff..8e8ad7eb 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCmdDraw.h
++++ b/MoltenVK/MoltenVK/Commands/MVKCmdDraw.h
+@@ -30,9 +30,7 @@
+ 
+ /**
+  * Vulkan command to bind buffers containing vertex content.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+ class MVKCmdBindVertexBuffers : public MVKCommand {
+ 
+ public:
+@@ -47,17 +45,10 @@ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ 	uint32_t _firstBinding;
+-    MVKSmallVector<MVKVertexMTLBufferBinding, N> _bindings;
++    MVKCommandVector<MVKVertexMTLBufferBinding> _bindings;
+ };
+ 
+-// Concrete template class implementations.
+-typedef MVKCmdBindVertexBuffers<1> MVKCmdBindVertexBuffers1;
+-typedef MVKCmdBindVertexBuffers<2> MVKCmdBindVertexBuffers2;
+-typedef MVKCmdBindVertexBuffers<8> MVKCmdBindVertexBuffersMulti;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdBindIndexBuffer
+@@ -79,8 +70,6 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+     MVKIndexMTLBufferBinding _binding;
+ };
+ 
+@@ -101,8 +90,6 @@ public:
+ 	void encodeIndexedIndirect(MVKCommandEncoder* cmdEncoder);
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ 	uint32_t _firstVertex;
+ 	uint32_t _vertexCount;
+ 	uint32_t _firstInstance;
+@@ -126,7 +113,6 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ 	void encodeIndexedIndirect(MVKCommandEncoder* cmdEncoder);
+ 
+ 	uint32_t _firstIndex;
+@@ -152,7 +138,6 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ 	void encodeIndexedIndirect(MVKCommandEncoder* cmdEncoder);
+ 
+ 	id<MTLBuffer> _mtlIndirectBuffer;
+@@ -185,8 +170,6 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder, const MVKIndexMTLBufferBinding& ibbOrig);
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ 	id<MTLBuffer> _mtlIndirectBuffer;
+ 	VkDeviceSize _mtlIndirectBufferOffset;
+ 	uint32_t _mtlIndirectBufferStride;
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCmdDraw.mm b/MoltenVK/MoltenVK/Commands/MVKCmdDraw.mm
+index c492057c..22ac613d 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCmdDraw.mm
++++ b/MoltenVK/MoltenVK/Commands/MVKCmdDraw.mm
+@@ -28,8 +28,7 @@
+ #pragma mark -
+ #pragma mark MVKCmdBindVertexBuffers
+ 
+-template <size_t N>
+-VkResult MVKCmdBindVertexBuffers<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdBindVertexBuffers::setContent(MVKCommandBuffer* cmdBuff,
+ 												uint32_t firstBinding,
+ 												uint32_t bindingCount,
+ 												const VkBuffer* pBuffers,
+@@ -37,7 +36,7 @@
+ 												const VkDeviceSize* pSizes,
+ 												const VkDeviceSize* pStrides) {
+ 	_firstBinding = firstBinding;
+-	_bindings.clear();	// Clear for reuse
++	_bindings.alc.cmdBuffer = cmdBuff;
+     _bindings.reserve(bindingCount);
+     MVKVertexMTLBufferBinding b;
+     for (uint32_t bindIdx = 0; bindIdx < bindingCount; bindIdx++) {
+@@ -52,15 +51,10 @@
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-void MVKCmdBindVertexBuffers<N>::encode(MVKCommandEncoder* cmdEncoder) {
++void MVKCmdBindVertexBuffers::encode(MVKCommandEncoder* cmdEncoder) {
+ 	cmdEncoder->getState().bindVertexBuffers(_firstBinding, _bindings.contents());
+ }
+ 
+-template class MVKCmdBindVertexBuffers<1>;
+-template class MVKCmdBindVertexBuffers<2>;
+-template class MVKCmdBindVertexBuffers<8>;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdBindIndexBuffer
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCmdPipeline.h b/MoltenVK/MoltenVK/Commands/MVKCmdPipeline.h
+index a48ca6a4..84c8da7d 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCmdPipeline.h
++++ b/MoltenVK/MoltenVK/Commands/MVKCmdPipeline.h
+@@ -35,9 +35,7 @@ class MVKDescriptorUpdateTemplate;
+ 
+ /**
+  * Vulkan command to execute secondary command buffers.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+ class MVKCmdExecuteCommands : public MVKCommand {
+ 
+ public:
+@@ -48,24 +46,16 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+-	MVKSmallVector<MVKCommandBuffer*, N> _secondaryCommandBuffers;
++	MVKCommandVector<MVKCommandBuffer*> _secondaryCommandBuffers;
+ };
+ 
+-// Concrete template class implementations.
+-typedef MVKCmdExecuteCommands<1> MVKCmdExecuteCommands1;
+-typedef MVKCmdExecuteCommands<16> MVKCmdExecuteCommandsMulti;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdPipelineBarrier
+ 
+ /**
+  * Vulkan command to add a pipeline barrier.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+ class MVKCmdPipelineBarrier : public MVKCommand {
+ 
+ public:
+@@ -86,18 +76,14 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ 	bool coversTextures();
+ 
+-	MVKSmallVector<MVKPipelineBarrier, N> _barriers;
++	MVKCommandVector<MVKPipelineBarrier> _barriers;
++	VkPipelineStageFlags _srcStageMask;
++	VkPipelineStageFlags _dstStageMask;
+ 	VkDependencyFlags _dependencyFlags;
+ };
+ 
+-// Concrete template class implementations.
+-typedef MVKCmdPipelineBarrier<1> MVKCmdPipelineBarrier1;
+-typedef MVKCmdPipelineBarrier<4> MVKCmdPipelineBarrier4;
+-typedef MVKCmdPipelineBarrier<32> MVKCmdPipelineBarrierMulti;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdBindPipeline
+@@ -125,10 +111,6 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ 	bool isTessellationPipeline() override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ };
+ 
+ 
+@@ -139,10 +121,6 @@ class MVKCmdBindComputePipeline : public MVKCmdBindPipeline {
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ };
+ 
+ 
+@@ -151,9 +129,7 @@ protected:
+ 
+ /**
+  * Vulkan command to bind descriptor sets without dynamic offsets.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+ class MVKCmdBindDescriptorSetsStatic : public MVKCommand {
+ 
+ public:
+@@ -169,30 +145,22 @@ public:
+ 	~MVKCmdBindDescriptorSetsStatic() override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ 	void encode(MVKCommandEncoder* cmdEncoder, MVKArrayRef<uint32_t> dynamicOffsets);
+ 
+-	MVKSmallVector<MVKDescriptorSet*, N> _descriptorSets;
++	MVKCommandVector<MVKDescriptorSet*> _descriptorSets;
+ 	MVKPipelineLayout* _pipelineLayout = nullptr;
+ 	VkPipelineBindPoint _pipelineBindPoint;
+ 	uint32_t _firstSet;
+ };
+ 
+-// Concrete template class implementations.
+-typedef MVKCmdBindDescriptorSetsStatic<1> MVKCmdBindDescriptorSetsStatic1;
+-typedef MVKCmdBindDescriptorSetsStatic<4> MVKCmdBindDescriptorSetsStatic4;
+-typedef MVKCmdBindDescriptorSetsStatic<8> MVKCmdBindDescriptorSetsStaticMulti;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdBindDescriptorSetsDynamic
+ 
+ /**
+  * Vulkan command to bind descriptor sets with dynamic offsets.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+-class MVKCmdBindDescriptorSetsDynamic : public MVKCmdBindDescriptorSetsStatic<N> {
++class MVKCmdBindDescriptorSetsDynamic : public MVKCmdBindDescriptorSetsStatic {
+ 
+ public:
+ 	VkResult setContent(MVKCommandBuffer* cmdBuff,
+@@ -207,24 +175,16 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+-	MVKSmallVector<uint32_t, N> _dynamicOffsets;
++	MVKCommandVector<uint32_t> _dynamicOffsets;
+ };
+ 
+-// Concrete template class implementations.
+-typedef MVKCmdBindDescriptorSetsDynamic<4> MVKCmdBindDescriptorSetsDynamic4;
+-typedef MVKCmdBindDescriptorSetsDynamic<8> MVKCmdBindDescriptorSetsDynamicMulti;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdPushConstants
+ 
+ /**
+  * Vulkan command to bind push constants.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+ class MVKCmdPushConstants : public MVKCommand {
+ 
+ public:
+@@ -238,19 +198,11 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+-	MVKSmallVector<char, N> _pushConstants;
++	MVKCommandVector<char> _pushConstants;
+ 	VkShaderStageFlags _stageFlags;
+ 	uint32_t _offset;
+ };
+ 
+-// Concrete template class implementations.
+-typedef MVKCmdPushConstants<64> MVKCmdPushConstants64;
+-typedef MVKCmdPushConstants<128> MVKCmdPushConstants128;
+-typedef MVKCmdPushConstants<512> MVKCmdPushConstantsMulti;
+-
+-
+ #pragma mark -
+ #pragma mark MVKCmdPushDescriptorSet
+ 
+@@ -269,10 +221,9 @@ public:
+ 	~MVKCmdPushDescriptorSet() override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ 	void clearDescriptorWrites();
+ 
+-	MVKSmallVector<VkWriteDescriptorSet, 1> _descriptorWrites;
++	MVKCommandVector<VkWriteDescriptorSet> _descriptorWrites;
+ 	MVKPipelineLayout* _pipelineLayout = nullptr;
+ 	VkPipelineBindPoint _pipelineBindPoint;
+ 	uint32_t _set;
+@@ -296,8 +247,6 @@ public:
+ 	~MVKCmdPushDescriptorSetWithTemplate() override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ 	MVKDescriptorUpdateTemplate* _descUpdateTemplate = nullptr;
+ 	MVKPipelineLayout* _pipelineLayout = nullptr;
+ 	void* _pData = nullptr;
+@@ -323,8 +272,6 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ 	MVKEvent* _mvkEvent;
+ };
+ 
+@@ -342,8 +289,6 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ 	MVKEvent* _mvkEvent;
+ };
+ 
+@@ -354,9 +299,7 @@ protected:
+ /** Vulkan command to wait for an event to be signaled. */
+ /**
+  * Vulkan command to wait for an event to be signaled.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+ class MVKCmdWaitEvents : public MVKCommand {
+ 
+ public:
+@@ -380,12 +323,5 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+-	MVKSmallVector<MVKEvent*, N> _mvkEvents;
+-
++	MVKCommandVector<MVKEvent*> _mvkEvents;
+ };
+-
+-// Concrete template class implementations.
+-typedef MVKCmdWaitEvents<1> MVKCmdWaitEvents1;
+-typedef MVKCmdWaitEvents<8> MVKCmdWaitEventsMulti;
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCmdPipeline.mm b/MoltenVK/MoltenVK/Commands/MVKCmdPipeline.mm
+index bcb2fd51..3424243f 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCmdPipeline.mm
++++ b/MoltenVK/MoltenVK/Commands/MVKCmdPipeline.mm
+@@ -29,12 +29,11 @@
+ #pragma mark -
+ #pragma mark MVKCmdExecuteCommands
+ 
+-template <size_t N>
+-VkResult MVKCmdExecuteCommands<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdExecuteCommands::setContent(MVKCommandBuffer* cmdBuff,
+ 											  uint32_t commandBuffersCount,
+ 											  const VkCommandBuffer* pCommandBuffers) {
+ 	// Add clear values
+-	_secondaryCommandBuffers.clear();	// Clear for reuse
++	_secondaryCommandBuffers.alc.cmdBuffer = cmdBuff;
+ 	_secondaryCommandBuffers.reserve(commandBuffersCount);
+ 	for (uint32_t cbIdx = 0; cbIdx < commandBuffersCount; cbIdx++) {
+ 		_secondaryCommandBuffers.push_back(MVKCommandBuffer::getMVKCommandBuffer(pCommandBuffers[cbIdx]));
+@@ -44,24 +43,19 @@
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-void MVKCmdExecuteCommands<N>::encode(MVKCommandEncoder* cmdEncoder) {
++void MVKCmdExecuteCommands::encode(MVKCommandEncoder* cmdEncoder) {
+     for (auto& cb : _secondaryCommandBuffers) { cmdEncoder->encodeSecondary(cb); }
+ }
+ 
+-template class MVKCmdExecuteCommands<1>;
+-template class MVKCmdExecuteCommands<16>;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdPipelineBarrier
+ 
+-template <size_t N>
+-VkResult MVKCmdPipelineBarrier<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdPipelineBarrier::setContent(MVKCommandBuffer* cmdBuff,
+ 											  const VkDependencyInfo* pDependencyInfo) {
+ 	_dependencyFlags = pDependencyInfo->dependencyFlags;
+ 
+-	_barriers.clear();	// Clear for reuse
++	_barriers.alc.cmdBuffer = cmdBuff;
+ 	_barriers.reserve(pDependencyInfo->memoryBarrierCount + 
+ 					  pDependencyInfo->bufferMemoryBarrierCount +
+ 					  pDependencyInfo->imageMemoryBarrierCount);
+@@ -108,8 +102,7 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ 	return result;
+ }
+ 
+-template <size_t N>
+-VkResult MVKCmdPipelineBarrier<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdPipelineBarrier::setContent(MVKCommandBuffer* cmdBuff,
+ 											  VkPipelineStageFlags srcStageMask,
+ 											  VkPipelineStageFlags dstStageMask,
+ 											  VkDependencyFlags dependencyFlags,
+@@ -121,7 +114,7 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ 											  const VkImageMemoryBarrier* pImageMemoryBarriers) {
+ 	_dependencyFlags = dependencyFlags;
+ 
+-	_barriers.clear();	// Clear for reuse
++	_barriers.alc.cmdBuffer = cmdBuff;
+ 	_barriers.reserve(memoryBarrierCount + bufferMemoryBarrierCount + imageMemoryBarrierCount);
+ 
+ 	for (uint32_t i = 0; i < memoryBarrierCount; i++) {
+@@ -137,8 +130,7 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-void MVKCmdPipelineBarrier<N>::encode(MVKCommandEncoder* cmdEncoder) {
++void MVKCmdPipelineBarrier::encode(MVKCommandEncoder* cmdEncoder) {
+ 	
+ 	auto& mtlFeats = cmdEncoder->getMetalFeatures();
+ 
+@@ -246,8 +238,7 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ 	}
+ }
+ 
+-template <size_t N>
+-bool MVKCmdPipelineBarrier<N>::coversTextures() {
++bool MVKCmdPipelineBarrier::coversTextures() {
+ 	for (auto& b : _barriers) {
+ 		switch (b.type) {
+ 			case MVKPipelineBarrier::Memory:	return true;
+@@ -258,10 +249,6 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ 	return false;
+ }
+ 
+-template class MVKCmdPipelineBarrier<1>;
+-template class MVKCmdPipelineBarrier<4>;
+-template class MVKCmdPipelineBarrier<32>;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdBindPipeline
+@@ -298,8 +285,7 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ #pragma mark -
+ #pragma mark MVKCmdBindDescriptorSetsStatic
+ 
+-template <size_t N>
+-VkResult MVKCmdBindDescriptorSetsStatic<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdBindDescriptorSetsStatic::setContent(MVKCommandBuffer* cmdBuff,
+ 													   VkPipelineBindPoint pipelineBindPoint,
+ 													   VkPipelineLayout layout,
+ 													   uint32_t firstSet,
+@@ -314,40 +300,34 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ 	_pipelineLayout->retain();
+ 
+ 	// Add the descriptor sets
+-	_descriptorSets.clear();	// Clear for reuse
++	_descriptorSets.alc.cmdBuffer = cmdBuff;
+ 	_descriptorSets.reserve(setCount);
+ 	for (uint32_t dsIdx = 0; dsIdx < setCount; dsIdx++) {
+ 		_descriptorSets.push_back((MVKDescriptorSet*)pDescriptorSets[dsIdx]);
+ 	}
+ 
++	if (_pipelineLayout) cmdBuff->destroyOnReset(this);
++
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-void MVKCmdBindDescriptorSetsStatic<N>::encode(MVKCommandEncoder* cmdEncoder) {
++void MVKCmdBindDescriptorSetsStatic::encode(MVKCommandEncoder* cmdEncoder) {
+ 	encode(cmdEncoder, MVKArrayRef<uint32_t>());
+ }
+ 
+-template <size_t N>
+-void MVKCmdBindDescriptorSetsStatic<N>::encode(MVKCommandEncoder* cmdEncoder, MVKArrayRef<uint32_t> dynamicOffsets) {
++void MVKCmdBindDescriptorSetsStatic::encode(MVKCommandEncoder* cmdEncoder, MVKArrayRef<uint32_t> dynamicOffsets) {
+ 	cmdEncoder->getState().bindDescriptorSets(_pipelineBindPoint, _pipelineLayout, _firstSet, static_cast<uint32_t>(_descriptorSets.size()), _descriptorSets.data(), static_cast<uint32_t>(dynamicOffsets.size()), dynamicOffsets.data());
+ }
+ 
+-template <size_t N>
+-MVKCmdBindDescriptorSetsStatic<N>::~MVKCmdBindDescriptorSetsStatic() {
++MVKCmdBindDescriptorSetsStatic::~MVKCmdBindDescriptorSetsStatic() {
+ 	if (_pipelineLayout) { _pipelineLayout->release(); }
+ }
+ 
+-template class MVKCmdBindDescriptorSetsStatic<1>;
+-template class MVKCmdBindDescriptorSetsStatic<4>;
+-template class MVKCmdBindDescriptorSetsStatic<8>;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdBindDescriptorSetsDynamic
+ 
+-template <size_t N>
+-VkResult MVKCmdBindDescriptorSetsDynamic<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdBindDescriptorSetsDynamic::setContent(MVKCommandBuffer* cmdBuff,
+ 														VkPipelineBindPoint pipelineBindPoint,
+ 														VkPipelineLayout layout,
+ 														uint32_t firstSet,
+@@ -356,11 +336,11 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ 														uint32_t dynamicOffsetCount,
+ 														const uint32_t* pDynamicOffsets) {
+ 
+-	MVKCmdBindDescriptorSetsStatic<N>::setContent(cmdBuff, pipelineBindPoint, layout,
++	MVKCmdBindDescriptorSetsStatic::setContent(cmdBuff, pipelineBindPoint, layout,
+ 												  firstSet, setCount, pDescriptorSets);
+ 
+ 	// Add the dynamic offsets
+-	_dynamicOffsets.clear();	// Clear for reuse
++	_dynamicOffsets.alc.cmdBuffer = cmdBuff;
+ 	_dynamicOffsets.reserve(dynamicOffsetCount);
+ 	for (uint32_t doIdx = 0; doIdx < dynamicOffsetCount; doIdx++) {
+ 		_dynamicOffsets.push_back(pDynamicOffsets[doIdx]);
+@@ -369,20 +349,15 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-void MVKCmdBindDescriptorSetsDynamic<N>::encode(MVKCommandEncoder* cmdEncoder) {
+-	MVKCmdBindDescriptorSetsStatic<N>::encode(cmdEncoder, _dynamicOffsets.contents());
++void MVKCmdBindDescriptorSetsDynamic::encode(MVKCommandEncoder* cmdEncoder) {
++	MVKCmdBindDescriptorSetsStatic::encode(cmdEncoder, _dynamicOffsets.contents());
+ }
+ 
+-template class MVKCmdBindDescriptorSetsDynamic<4>;
+-template class MVKCmdBindDescriptorSetsDynamic<8>;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdPushConstants
+ 
+-template <size_t N>
+-VkResult MVKCmdPushConstants<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdPushConstants::setContent(MVKCommandBuffer* cmdBuff,
+ 											VkPipelineLayout layout,
+ 											VkShaderStageFlags stageFlags,
+ 											uint32_t offset,
+@@ -391,21 +366,17 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ 	_stageFlags = stageFlags;
+ 	_offset = offset;
+ 
++	_pushConstants.alc.cmdBuffer = cmdBuff;
+ 	_pushConstants.resize(size);
+ 	std::copy_n((char*)pValues, size, _pushConstants.begin());
+ 
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-void MVKCmdPushConstants<N>::encode(MVKCommandEncoder* cmdEncoder) {
++void MVKCmdPushConstants::encode(MVKCommandEncoder* cmdEncoder) {
+ 	cmdEncoder->getState().pushConstants(_offset, static_cast<uint32_t>(_pushConstants.byteSize()), _pushConstants.data());
+ }
+ 
+-template class MVKCmdPushConstants<64>;
+-template class MVKCmdPushConstants<128>;
+-template class MVKCmdPushConstants<512>;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdPushDescriptorSet
+@@ -425,7 +396,7 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ 	_pipelineLayout->retain();
+ 
+ 	// Add the descriptor writes
+-	clearDescriptorWrites();	// Clear for reuse
++	_descriptorWrites.alc.cmdBuffer = cmdBuff;
+ 	_descriptorWrites.reserve(descriptorWriteCount);
+ 	for (uint32_t dwIdx = 0; dwIdx < descriptorWriteCount; dwIdx++) {
+ 		_descriptorWrites.push_back(pDescriptorWrites[dwIdx]);
+@@ -464,6 +435,8 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ 		}
+ 	}
+ 
++	cmdBuff->destroyOnReset(this);
++
+ 	return VK_SUCCESS;
+ }
+ 
+@@ -523,6 +496,8 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ 		mvkCopy(_pData, pData, _dataSize);
+ 	}
+ 
++	cmdBuff->destroyOnReset(this);
++
+ 	return VK_SUCCESS;
+ }
+ 
+@@ -579,12 +554,11 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ #pragma mark -
+ #pragma mark MVKCmdWaitEvents
+ 
+-template <size_t N>
+-VkResult MVKCmdWaitEvents<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdWaitEvents::setContent(MVKCommandBuffer* cmdBuff,
+ 										 uint32_t eventCount,
+ 										 const VkEvent* pEvents,
+ 										 const VkDependencyInfo* pDependencyInfos) {
+-	_mvkEvents.clear();	// Clear for reuse
++	_mvkEvents.alc.cmdBuffer = cmdBuff;
+ 	_mvkEvents.reserve(eventCount);
+ 	for (uint32_t i = 0; i < eventCount; i++) {
+ 		_mvkEvents.push_back((MVKEvent*)pEvents[i]);
+@@ -593,8 +567,7 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-VkResult MVKCmdWaitEvents<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdWaitEvents::setContent(MVKCommandBuffer* cmdBuff,
+ 										 uint32_t eventCount,
+ 										 const VkEvent* pEvents,
+ 										 VkPipelineStageFlags srcStageMask,
+@@ -605,7 +578,7 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ 										 const VkBufferMemoryBarrier* pBufferMemoryBarriers,
+ 										 uint32_t imageMemoryBarrierCount,
+ 										 const VkImageMemoryBarrier* pImageMemoryBarriers) {
+-	_mvkEvents.clear();	// Clear for reuse
++	_mvkEvents.alc.cmdBuffer = cmdBuff;
+ 	_mvkEvents.reserve(eventCount);
+ 	for (uint32_t i = 0; i < eventCount; i++) {
+ 		_mvkEvents.push_back((MVKEvent*)pEvents[i]);
+@@ -614,14 +587,10 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-void MVKCmdWaitEvents<N>::encode(MVKCommandEncoder* cmdEncoder) {
++void MVKCmdWaitEvents::encode(MVKCommandEncoder* cmdEncoder) {
+ 	cmdEncoder->endCurrentMetalEncoding();
+ 	for (MVKEvent* mvkEvt : _mvkEvents) {
+ 		mvkEvt->encodeWait(cmdEncoder->_mtlCmdBuffer);
+ 	}
+ }
+ 
+-template class MVKCmdWaitEvents<1>;
+-template class MVKCmdWaitEvents<8>;
+-
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCmdQueries.h b/MoltenVK/MoltenVK/Commands/MVKCmdQueries.h
+index 20fee65a..37d165b6 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCmdQueries.h
++++ b/MoltenVK/MoltenVK/Commands/MVKCmdQueries.h
+@@ -55,8 +55,6 @@ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+     VkQueryControlFlags _flags;
+ };
+ 
+@@ -68,10 +66,6 @@ class MVKCmdEndQuery : public MVKCmdQuery {
+ 
+ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ };
+ 
+ 
+@@ -89,8 +83,6 @@ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ 	VkPipelineStageFlags2 _stage;
+ };
+ 
+@@ -109,8 +101,6 @@ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+     uint32_t _queryCount;
+ };
+ 
+@@ -133,8 +123,6 @@ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+     MVKBuffer* _destBuffer;
+     VkDeviceSize _destOffset;
+     VkDeviceSize _destStride;
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCmdRendering.h b/MoltenVK/MoltenVK/Commands/MVKCmdRendering.h
+index 8613ccb0..eb326f7b 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCmdRendering.h
++++ b/MoltenVK/MoltenVK/Commands/MVKCmdRendering.h
+@@ -29,40 +29,13 @@ class MVKRenderPass;
+ class MVKFramebuffer;
+ 
+ 
+-#pragma mark -
+-#pragma mark MVKCmdBeginRenderPassBase
+-
+-/**
+- * Abstract base class of MVKCmdBeginRenderPass.
+- * Contains all pieces that are independent of the templated portions.
+- */
+-class MVKCmdBeginRenderPassBase : public MVKCommand {
+-
+-public:
+-	VkResult setContent(MVKCommandBuffer* cmdBuff,
+-						const VkRenderPassBeginInfo* pRenderPassBegin,
+-						const VkSubpassBeginInfo* pSubpassBeginInfo);
+-
+-	inline MVKRenderPass* getRenderPass() { return _renderPass; }
+-
+-protected:
+-
+-	MVKRenderPass* _renderPass;
+-	MVKFramebuffer* _framebuffer;
+-	VkRect2D _renderArea;
+-	VkSubpassContents _contents;
+-};
+-
+-
+ #pragma mark -
+ #pragma mark MVKCmdBeginRenderPass
+ 
+ /**
+  * Vulkan command to begin a render pass.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N_CV, size_t N_A>
+-class MVKCmdBeginRenderPass : public MVKCmdBeginRenderPassBase {
++class MVKCmdBeginRenderPass : public MVKCommand {
+ 
+ public:
+ 	VkResult setContent(MVKCommandBuffer* cmdBuff,
+@@ -72,30 +45,18 @@ public:
+ 
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
++	inline MVKRenderPass* getRenderPass() { return _renderPass; }
++
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
++	MVKRenderPass* _renderPass;
++	MVKFramebuffer* _framebuffer;
++	VkRect2D _renderArea;
++	VkSubpassContents _contents;
+ 
+-	MVKSmallVector<VkClearValue, N_CV> _clearValues;
+-    MVKSmallVector<MVKImageView*, N_A> _attachments;
++	MVKCommandVector<VkClearValue> _clearValues;
++	MVKCommandVector<MVKImageView*> _attachments;
+ };
+ 
+-// Concrete template class implementations.
+-typedef MVKCmdBeginRenderPass<1, 0> MVKCmdBeginRenderPass10;
+-typedef MVKCmdBeginRenderPass<2, 0> MVKCmdBeginRenderPass20;
+-typedef MVKCmdBeginRenderPass<9, 0> MVKCmdBeginRenderPassMulti0;
+-
+-typedef MVKCmdBeginRenderPass<1, 1> MVKCmdBeginRenderPass11;
+-typedef MVKCmdBeginRenderPass<2, 1> MVKCmdBeginRenderPass21;
+-typedef MVKCmdBeginRenderPass<9, 1> MVKCmdBeginRenderPassMulti1;
+-
+-typedef MVKCmdBeginRenderPass<1, 2> MVKCmdBeginRenderPass12;
+-typedef MVKCmdBeginRenderPass<2, 2> MVKCmdBeginRenderPass22;
+-typedef MVKCmdBeginRenderPass<9, 2> MVKCmdBeginRenderPassMulti2;
+-
+-typedef MVKCmdBeginRenderPass<1, 9> MVKCmdBeginRenderPass1Multi;
+-typedef MVKCmdBeginRenderPass<2, 9> MVKCmdBeginRenderPass2Multi;
+-typedef MVKCmdBeginRenderPass<9, 9> MVKCmdBeginRenderPassMultiMulti;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdNextSubpass
+@@ -112,8 +73,6 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ 	VkSubpassContents _contents;
+ };
+ 
+@@ -129,10 +88,6 @@ public:
+ 						const VkSubpassEndInfo* pSubpassEndInfo);
+ 
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ };
+ 
+ 
+@@ -141,9 +96,7 @@ protected:
+ 
+ /**
+  * Vulkan command to begin rendering.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+ class MVKCmdBeginRendering : public MVKCommand {
+ 
+ public:
+@@ -154,20 +107,12 @@ public:
+ 
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ 	VkRenderingInfo _renderingInfo;
+-	MVKSmallVector<VkRenderingAttachmentInfo, N> _colorAttachments;
++	MVKCommandVector<VkRenderingAttachmentInfo> _colorAttachments;
+ 	VkRenderingAttachmentInfo _depthAttachment;
+ 	VkRenderingAttachmentInfo _stencilAttachment;
+ };
+ 
+-// Concrete template class implementations.
+-typedef MVKCmdBeginRendering<1> MVKCmdBeginRendering1;
+-typedef MVKCmdBeginRendering<2> MVKCmdBeginRendering2;
+-typedef MVKCmdBeginRendering<4> MVKCmdBeginRendering4;
+-typedef MVKCmdBeginRendering<8> MVKCmdBeginRenderingMulti;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdSetRenderingAttachmentLocations
+@@ -181,9 +126,7 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+-	MVKSmallVector<uint32_t, 8> _colorAttachmentLocations;
++	MVKCommandVector<uint32_t> _colorAttachmentLocations;
+ };
+ 
+ 
+@@ -199,9 +142,7 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+-	MVKSmallVector<uint32_t, 8> _colorAttachmentInputIndices;
++	MVKCommandVector<uint32_t> _colorAttachmentInputIndices;
+ 	uint32_t _depthInputAttachmentIndex;
+ 	uint32_t _stencilInputAttachmentIndex;
+ 	bool _hasDepthInputAttachmentIndex;
+@@ -218,10 +159,6 @@ public:
+ 	VkResult setContent(MVKCommandBuffer* cmdBuff);
+ 
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ };
+ 
+ 
+@@ -237,9 +174,7 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+-	MVKSmallVector<VkSampleLocationEXT, kMVKMaxSampleCount> _sampleLocations;
++	MVKCommandVector<VkSampleLocationEXT> _sampleLocations;
+ };
+ 
+ 
+@@ -250,9 +185,6 @@ class MVKCmdSetSampleLocationsEnable : public MVKSingleValueCommand<VkBool32> {
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -261,9 +193,7 @@ protected:
+ 
+ /**
+  * Vulkan command to set the viewports.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+ class MVKCmdSetViewport : public MVKCommand {
+ 
+ public:
+@@ -275,25 +205,17 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+-	MVKSmallVector<VkViewport, N> _viewports;
++	MVKCommandVector<VkViewport> _viewports;
+ 	uint32_t _firstViewport;
+ };
+ 
+-// Concrete template class implementations.
+-typedef MVKCmdSetViewport<1> MVKCmdSetViewport1;
+-typedef MVKCmdSetViewport<kMVKMaxViewportScissorCount> MVKCmdSetViewportMulti;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdSetScissor
+ 
+ /**
+  * Vulkan command to set the scissor rectangles.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+ class MVKCmdSetScissor : public MVKCommand {
+ 
+ public:
+@@ -305,16 +227,10 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+-	MVKSmallVector<VkRect2D, N> _scissors;
++	MVKCommandVector<VkRect2D> _scissors;
+ 	uint32_t _firstScissor;
+ };
+ 
+-// Concrete template class implementations.
+-typedef MVKCmdSetScissor<1> MVKCmdSetScissor1;
+-typedef MVKCmdSetScissor<kMVKMaxViewportScissorCount> MVKCmdSetScissorMulti;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdSetDepthBias
+@@ -323,9 +239,6 @@ class MVKCmdSetDepthBias : public MVKSingleValueCommand<MVKDepthBias> {
+ 
+ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -336,9 +249,6 @@ class MVKCmdSetDepthBiasEnable : public MVKSingleValueCommand<VkBool32> {
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -349,9 +259,6 @@ class MVKCmdSetBlendConstants : public MVKSingleValueCommand<MVKColor32> {
+ 
+ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -362,9 +269,6 @@ class MVKCmdSetDepthTestEnable : public MVKSingleValueCommand<VkBool32> {
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -375,9 +279,6 @@ class MVKCmdSetDepthWriteEnable : public MVKSingleValueCommand<VkBool32> {
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -388,9 +289,6 @@ class MVKCmdSetDepthClipEnable : public MVKSingleValueCommand<VkBool32> {
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -401,9 +299,6 @@ class MVKCmdSetDepthCompareOp : public MVKSingleValueCommand<VkCompareOp> {
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -414,9 +309,6 @@ class MVKCmdSetDepthBounds : public MVKSingleValueCommand<MVKDepthBounds> {
+ 
+ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-    MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -427,9 +319,6 @@ class MVKCmdSetDepthBoundsTestEnable : public MVKSingleValueCommand<VkBool32> {
+ 
+ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-    MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -440,9 +329,6 @@ class MVKCmdSetStencilTestEnable : public MVKSingleValueCommand<VkBool32> {
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -462,8 +348,6 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ 	VkStencilFaceFlags _faceMask;
+ 	VkStencilOp _failOp;
+ 	VkStencilOp _passOp;
+@@ -485,8 +369,6 @@ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+     VkStencilFaceFlags _faceMask;
+     uint32_t _stencilCompareMask;
+ };
+@@ -505,8 +387,6 @@ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+     VkStencilFaceFlags _faceMask;
+     uint32_t _stencilWriteMask;
+ };
+@@ -525,8 +405,6 @@ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+     VkStencilFaceFlags _faceMask;
+     uint32_t _stencilReference;
+ };
+@@ -539,9 +417,6 @@ class MVKCmdSetCullMode : public MVKSingleValueCommand<VkCullModeFlags> {
+ 
+ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-    MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -552,9 +427,6 @@ class MVKCmdSetFrontFace : public MVKSingleValueCommand<VkFrontFace> {
+ 
+ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-    MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -565,9 +437,6 @@ class MVKCmdSetPatchControlPoints : public MVKSingleValueCommand<uint32_t> {
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -578,9 +447,6 @@ class MVKCmdSetPolygonMode : public MVKSingleValueCommand<VkPolygonMode> {
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -591,9 +457,6 @@ class MVKCmdSetLineRasterizationMode : public MVKSingleValueCommand<VkLineRaster
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -604,9 +467,6 @@ class MVKCmdSetLineWidth : public MVKSingleValueCommand<float> {
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -617,9 +477,6 @@ class MVKCmdSetPrimitiveTopology : public MVKSingleValueCommand<VkPrimitiveTopol
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -630,9 +487,6 @@ class MVKCmdSetPrimitiveRestartEnable : public MVKSingleValueCommand<VkBool32> {
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -643,9 +497,6 @@ class MVKCmdSetRasterizerDiscardEnable : public MVKSingleValueCommand<VkBool32>
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+ 
+@@ -656,8 +507,5 @@ class MVKCmdSetProvokingVertexMode : public MVKSingleValueCommand<VkProvokingVer
+ 
+ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+-
+-protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ };
+ 
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCmdRendering.mm b/MoltenVK/MoltenVK/Commands/MVKCmdRendering.mm
+index 2586a80b..b9dd85c4 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCmdRendering.mm
++++ b/MoltenVK/MoltenVK/Commands/MVKCmdRendering.mm
+@@ -27,11 +27,12 @@
+ 
+ 
+ #pragma mark -
+-#pragma mark MVKCmdBeginRenderPassBase
++#pragma mark MVKCmdBeginRenderPass
+ 
+-VkResult MVKCmdBeginRenderPassBase::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdBeginRenderPass::setContent(MVKCommandBuffer* cmdBuff,
+ 											   const VkRenderPassBeginInfo* pRenderPassBegin,
+-											   const VkSubpassBeginInfo* pSubpassBeginInfo) {
++											   const VkSubpassBeginInfo* pSubpassBeginInfo,
++											   MVKArrayRef<MVKImageView*> attachments) {
+ 	_contents = pSubpassBeginInfo->contents;
+ 	_renderPass = (MVKRenderPass*)pRenderPassBegin->renderPass;
+ 	_framebuffer = (MVKFramebuffer*)pRenderPassBegin->framebuffer;
+@@ -39,29 +40,16 @@
+ 
+ 	cmdBuff->_currentSubpassInfo.beginRenderpass(_renderPass);
+ 
+-	return VK_SUCCESS;
+-}
+-
+-
+-#pragma mark -
+-#pragma mark MVKCmdBeginRenderPass
+-
+-template <size_t N_CV, size_t N_A>
+-VkResult MVKCmdBeginRenderPass<N_CV, N_A>::setContent(MVKCommandBuffer* cmdBuff,
+-													  const VkRenderPassBeginInfo* pRenderPassBegin,
+-													  const VkSubpassBeginInfo* pSubpassBeginInfo,
+-													  MVKArrayRef<MVKImageView*> attachments) {
+-	MVKCmdBeginRenderPassBase::setContent(cmdBuff, pRenderPassBegin, pSubpassBeginInfo);
+-
++	_attachments.alc.cmdBuffer = cmdBuff;
+ 	_attachments.assign(attachments.begin(), attachments.end());
++	_clearValues.alc.cmdBuffer = cmdBuff;
+ 	_clearValues.assign(pRenderPassBegin->pClearValues,
+ 						pRenderPassBegin->pClearValues + pRenderPassBegin->clearValueCount);
+ 
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N_CV, size_t N_A>
+-void MVKCmdBeginRenderPass<N_CV, N_A>::encode(MVKCommandEncoder* cmdEncoder) {
++void MVKCmdBeginRenderPass::encode(MVKCommandEncoder* cmdEncoder) {
+ 	cmdEncoder->beginRenderpass(this,
+ 								_contents,
+ 								_renderPass,
+@@ -72,22 +60,6 @@
+ 								kMVKCommandUseBeginRenderPass);
+ }
+ 
+-template class MVKCmdBeginRenderPass<1, 0>;
+-template class MVKCmdBeginRenderPass<2, 0>;
+-template class MVKCmdBeginRenderPass<9, 0>;
+-
+-template class MVKCmdBeginRenderPass<1, 1>;
+-template class MVKCmdBeginRenderPass<2, 1>;
+-template class MVKCmdBeginRenderPass<9, 1>;
+-
+-template class MVKCmdBeginRenderPass<1, 2>;
+-template class MVKCmdBeginRenderPass<2, 2>;
+-template class MVKCmdBeginRenderPass<9, 2>;
+-
+-template class MVKCmdBeginRenderPass<1, 9>;
+-template class MVKCmdBeginRenderPass<2, 9>;
+-template class MVKCmdBeginRenderPass<9, 9>;
+-
+ #pragma mark -
+ #pragma mark MVKCmdNextSubpass
+ 
+@@ -132,12 +104,12 @@
+ #pragma mark -
+ #pragma mark MVKCmdBeginRendering
+ 
+-template <size_t N>
+-VkResult MVKCmdBeginRendering<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdBeginRendering::setContent(MVKCommandBuffer* cmdBuff,
+ 											 const VkRenderingInfo* pRenderingInfo) {
+ 	_renderingInfo = *pRenderingInfo;
+ 
+ 	// Copy attachments content, redirect info pointers to copied content, and remove any stale pNext refs
++	_colorAttachments.alc.cmdBuffer = cmdBuff;
+ 	_colorAttachments.assign(_renderingInfo.pColorAttachments,
+ 							 _renderingInfo.pColorAttachments + _renderingInfo.colorAttachmentCount);
+ 	_renderingInfo.pColorAttachments = _colorAttachments.data();
+@@ -155,16 +127,10 @@
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-void MVKCmdBeginRendering<N>::encode(MVKCommandEncoder* cmdEncoder) {
++void MVKCmdBeginRendering::encode(MVKCommandEncoder* cmdEncoder) {
+ 	cmdEncoder->beginRendering(this, &_renderingInfo);
+ }
+ 
+-template class MVKCmdBeginRendering<1>;
+-template class MVKCmdBeginRendering<2>;
+-template class MVKCmdBeginRendering<4>;
+-template class MVKCmdBeginRendering<8>;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdSetRenderingAttachmentLocations
+@@ -233,7 +199,7 @@ void mvkPopulateFromOrFillAscending(Vec& dst, const uint32_t* pSrc, size_t count
+ 
+ VkResult MVKCmdSetSampleLocations::setContent(MVKCommandBuffer* cmdBuff,
+ 											  const VkSampleLocationsInfoEXT* pSampleLocationsInfo) {
+-	_sampleLocations.clear();
++	_sampleLocations.alc.cmdBuffer = cmdBuff;
+ 	for (uint32_t slIdx = 0; slIdx < pSampleLocationsInfo->sampleLocationsCount; slIdx++) {
+ 		_sampleLocations.push_back(pSampleLocationsInfo->pSampleLocations[slIdx]);
+ 	}
+@@ -264,13 +230,12 @@ void mvkPopulateFromOrFillAscending(Vec& dst, const uint32_t* pSrc, size_t count
+ #pragma mark -
+ #pragma mark MVKCmdSetViewport
+ 
+-template <size_t N>
+-VkResult MVKCmdSetViewport<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdSetViewport::setContent(MVKCommandBuffer* cmdBuff,
+ 										  uint32_t firstViewport,
+ 										  uint32_t viewportCount,
+ 										  const VkViewport* pViewports) {
+ 	_firstViewport = firstViewport;
+-	_viewports.clear();
++	_viewports.alc.cmdBuffer = cmdBuff;
+ 	_viewports.reserve(viewportCount);
+ 	for (uint32_t vpIdx = 0; vpIdx < viewportCount; vpIdx++) {
+ 		_viewports.push_back(pViewports[vpIdx]);
+@@ -279,8 +244,7 @@ void mvkPopulateFromOrFillAscending(Vec& dst, const uint32_t* pSrc, size_t count
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-void MVKCmdSetViewport<N>::encode(MVKCommandEncoder* cmdEncoder) {
++void MVKCmdSetViewport::encode(MVKCommandEncoder* cmdEncoder) {
+ 	uint32_t end = std::min(_firstViewport + static_cast<uint32_t>(_viewports.size()), kMVKMaxViewportScissorCount);
+ 	MVKVulkanGraphicsCommandEncoderState& state = cmdEncoder->getState().updateDynamicState(MVKRenderStateFlag::Viewports);
+ 	state._renderState.numViewports = std::max(static_cast<uint8_t>(end), cmdEncoder->getVkGraphics()._renderState.numViewports);
+@@ -288,20 +252,16 @@ void mvkPopulateFromOrFillAscending(Vec& dst, const uint32_t* pSrc, size_t count
+ 		state._viewports[i] = _viewports[i - _firstViewport];
+ }
+ 
+-template class MVKCmdSetViewport<1>;
+-template class MVKCmdSetViewport<kMVKMaxViewportScissorCount>;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdSetScissor
+ 
+-template <size_t N>
+-VkResult MVKCmdSetScissor<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdSetScissor::setContent(MVKCommandBuffer* cmdBuff,
+ 										 uint32_t firstScissor,
+ 										 uint32_t scissorCount,
+ 										 const VkRect2D* pScissors) {
+ 	_firstScissor = firstScissor;
+-	_scissors.clear();
++	_scissors.alc.cmdBuffer = cmdBuff;
+ 	_scissors.reserve(scissorCount);
+ 	for (uint32_t sIdx = 0; sIdx < scissorCount; sIdx++) {
+ 		_scissors.push_back(pScissors[sIdx]);
+@@ -310,8 +270,7 @@ void mvkPopulateFromOrFillAscending(Vec& dst, const uint32_t* pSrc, size_t count
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-void MVKCmdSetScissor<N>::encode(MVKCommandEncoder* cmdEncoder) {
++void MVKCmdSetScissor::encode(MVKCommandEncoder* cmdEncoder) {
+ 	uint32_t end = std::min(_firstScissor + static_cast<uint32_t>(_scissors.size()), kMVKMaxViewportScissorCount);
+ 	MVKVulkanGraphicsCommandEncoderState& state = cmdEncoder->getState().updateDynamicState(MVKRenderStateFlag::Scissors);
+ 	state._renderState.numScissors = std::max(static_cast<uint8_t>(end), cmdEncoder->getVkGraphics()._renderState.numScissors);
+@@ -319,9 +278,6 @@ void mvkPopulateFromOrFillAscending(Vec& dst, const uint32_t* pSrc, size_t count
+ 		state._scissors[i] = _scissors[i - _firstScissor];
+ }
+ 
+-template class MVKCmdSetScissor<1>;
+-template class MVKCmdSetScissor<kMVKMaxViewportScissorCount>;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdSetDepthBias
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCmdTransfer.h b/MoltenVK/MoltenVK/Commands/MVKCmdTransfer.h
+index 4abeba6f..c3770003 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCmdTransfer.h
++++ b/MoltenVK/MoltenVK/Commands/MVKCmdTransfer.h
+@@ -35,9 +35,7 @@ class MVKBuffer;
+ 
+ /**
+  * Vulkan command to copy image regions.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+ class MVKCmdCopyImage : public MVKCommand {
+ 
+ public:
+@@ -56,20 +54,15 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder, MVKCommandUse commandUse);
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+     VkResult validate(MVKCommandBuffer* cmdBuff, const VkImageCopy2* region);
+ 
+-	MVKSmallVector<VkImageCopy2, N> _vkImageCopies;
++	MVKCommandVector<VkImageCopy2> _vkImageCopies;
+ 	MVKImage* _srcImage;
+ 	MVKImage* _dstImage;
+ 	VkImageLayout _srcLayout;
+ 	VkImageLayout _dstLayout;
+ };
+ 
+-// Concrete template class implementations.
+-typedef MVKCmdCopyImage<1> MVKCmdCopyImage1;
+-typedef MVKCmdCopyImage<4> MVKCmdCopyImageMulti;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdBlitImage
+@@ -85,9 +78,7 @@ typedef struct {
+ 
+ /**
+  * Vulkan command to BLIT image regions.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+ class MVKCmdBlitImage : public MVKCommand {
+ 
+ public:
+@@ -107,13 +98,12 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder, MVKCommandUse commandUse);
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ 	bool canCopyFormats(const VkImageBlit2& region);
+ 	bool canCopy(const VkImageBlit2& region);
+ 	void populateVertices(MVKVertexPosTex* vertices, const VkImageBlit2& region);
+     VkResult validate(MVKCommandBuffer* cmdBuff, const VkImageBlit2* region, bool isDestUnwritableLinear);
+ 
+-	MVKSmallVector<VkImageBlit2, N> _vkImageBlits;
++	MVKCommandVector<VkImageBlit2> _vkImageBlits;
+ 	MVKImage* _srcImage;
+ 	MVKImage* _dstImage;
+ 	VkImageLayout _srcLayout;
+@@ -121,11 +111,6 @@ protected:
+ 	VkFilter _filter;
+ };
+ 
+-// Concrete template class implementations.
+-typedef MVKCmdBlitImage<1> MVKCmdBlitImage1;
+-typedef MVKCmdBlitImage<4> MVKCmdBlitImageMulti;
+-
+-
+ #pragma mark -
+ #pragma mark MVKCmdResolveImage
+ 
+@@ -137,9 +122,7 @@ typedef struct {
+ 
+ /**
+  * Vulkan command to resolve image regions.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+ class MVKCmdResolveImage : public MVKCommand {
+ 
+ public:
+@@ -156,29 +139,21 @@ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+     VkResult validate(MVKCommandBuffer* cmdBuff, const VkImageResolve2* region);
+ 
+-	MVKSmallVector<VkImageResolve2, N> _vkImageResolves;
++	MVKCommandVector<VkImageResolve2> _vkImageResolves;
+     MVKImage* _srcImage;
+ 	MVKImage* _dstImage;
+     VkImageLayout _srcLayout;
+     VkImageLayout _dstLayout;
+ };
+ 
+-// Concrete template class implementations.
+-typedef MVKCmdResolveImage<1> MVKCmdResolveImage1;
+-typedef MVKCmdResolveImage<4> MVKCmdResolveImageMulti;
+-
+-
+ #pragma mark -
+ #pragma mark MVKCmdCopyBuffer
+ 
+ /**
+  * Vulkan command to copy buffer regions.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+ class MVKCmdCopyBuffer : public MVKCommand {
+ 
+ public:
+@@ -193,26 +168,18 @@ public:
+ 	void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+-	MVKSmallVector<VkBufferCopy2, N> _bufferCopyRegions;
++	MVKCommandVector<VkBufferCopy2> _bufferCopyRegions;
+ 	MVKBuffer* _srcBuffer;
+ 	MVKBuffer* _dstBuffer;
+ };
+ 
+-// Concrete template class implementations.
+-typedef MVKCmdCopyBuffer<1> MVKCmdCopyBuffer1;
+-typedef MVKCmdCopyBuffer<4> MVKCmdCopyBufferMulti;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdBufferImageCopy
+ 
+ /**
+  * Vulkan command to copy either from a buffer to an image, or from an image to a buffer.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+ class MVKCmdBufferImageCopy : public MVKCommand {
+ 
+ public:
+@@ -231,31 +198,22 @@ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ 	bool isArrayTexture();
+     VkResult validate(MVKCommandBuffer* cmdBuff);
+ 
+-	MVKSmallVector<VkBufferImageCopy2, N> _bufferImageCopyRegions;
++	MVKCommandVector<VkBufferImageCopy2> _bufferImageCopyRegions;
+     MVKBuffer* _buffer;
+     MVKImage* _image;
+     bool _toImage = false;
+ };
+ 
+-// Concrete template class implementations.
+-typedef MVKCmdBufferImageCopy<1> MVKCmdBufferImageCopy1;
+-typedef MVKCmdBufferImageCopy<4> MVKCmdBufferImageCopy4;	// To support MVKCmdCopyImage
+-typedef MVKCmdBufferImageCopy<8> MVKCmdBufferImageCopy8;
+-typedef MVKCmdBufferImageCopy<16> MVKCmdBufferImageCopyMulti;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdClearAttachments
+ 
+ /**
+  * Abstract Vulkan command to clear attachment regions.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+ class MVKCmdClearAttachments : public MVKCommand {
+ 
+ public:
+@@ -279,7 +237,7 @@ protected:
+ 	virtual void setClearColorValue(uint32_t attIdx, const VkClearColorValue& clearValue) = 0;
+ 	NSString* getMTLDebugGroupLabel();
+ 
+-	MVKSmallVector<VkClearRect, N> _clearRects;
++	MVKCommandVector<VkClearRect> _clearRects;
+ 	VkClearDepthStencilValue _clearDepthStencilValue;
+ 	MVKCommandUse _commandUse;
+ 	bool _shouldClearAtt[kMVKClearAttachmentCount];
+@@ -291,53 +249,39 @@ protected:
+ 
+ /**
+  * Vulkan command to clear regions in a single attachment.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+-class MVKCmdClearSingleAttachment : public MVKCmdClearAttachments<N> {
++class MVKCmdClearSingleAttachment : public MVKCmdClearAttachments {
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ 	VkClearColorValue& getClearColorValue(uint32_t attIdx) override { return _clearColorValue; }
+ 	void setClearColorValue(uint32_t attIdx, const VkClearColorValue& clearValue) override { _clearColorValue = clearValue; }
+ 
+ 	VkClearColorValue _clearColorValue;
+ };
+ 
+-typedef MVKCmdClearSingleAttachment<1> MVKCmdClearSingleAttachment1;
+-typedef MVKCmdClearSingleAttachment<4> MVKCmdClearSingleAttachmentMulti;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdClearMultiAttachments
+ 
+ /**
+  * Vulkan command to clear regions multiple attachment.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+-class MVKCmdClearMultiAttachments : public MVKCmdClearAttachments<N> {
++class MVKCmdClearMultiAttachments : public MVKCmdClearAttachments {
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ 	VkClearColorValue& getClearColorValue(uint32_t attIdx) override { return _clearColorValues[attIdx]; }
+ 	void setClearColorValue(uint32_t attIdx, const VkClearColorValue& clearValue) override { _clearColorValues[attIdx] = clearValue; }
+ 
+ 	VkClearColorValue _clearColorValues[kMVKMaxColorAttachmentCount];
+ };
+ 
+-typedef MVKCmdClearMultiAttachments<1> MVKCmdClearMultiAttachments1;
+-typedef MVKCmdClearMultiAttachments<4> MVKCmdClearMultiAttachmentsMulti;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdClearImage
+ 
+ /**
+  * Abstract Vulkan command to clear an image.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+ class MVKCmdClearImage : public MVKCommand {
+ 
+ public:
+@@ -356,7 +300,7 @@ protected:
+     void populateVertices(MVKVertexPosTex* vertices, const VkImageBlit* pRegion);
+ 	virtual bool isDepthStencilClear() = 0;
+ 
+-	MVKSmallVector<VkImageSubresourceRange, N> _subresourceRanges;
++	MVKCommandVector<VkImageSubresourceRange> _subresourceRanges;
+ 	MVKImage* _image;
+ 	VkClearValue _clearValue;
+ };
+@@ -366,38 +310,26 @@ protected:
+ 
+ /**
+  * Abstract Vulkan command to clear a color image.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+-class MVKCmdClearColorImage : public MVKCmdClearImage<N> {
++class MVKCmdClearColorImage : public MVKCmdClearImage {
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ 	bool isDepthStencilClear() override { return false; }
+ };
+ 
+-typedef MVKCmdClearColorImage<1> MVKCmdClearColorImage1;
+-typedef MVKCmdClearColorImage<4> MVKCmdClearColorImageMulti;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdClearDepthStencilImage
+ 
+ /**
+  * Abstract Vulkan command to clear a depth stencil image.
+- * Template class to balance vector pre-allocations between very common low counts and fewer larger counts.
+  */
+-template <size_t N>
+-class MVKCmdClearDepthStencilImage : public MVKCmdClearImage<N> {
++class MVKCmdClearDepthStencilImage : public MVKCmdClearImage {
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+ 	bool isDepthStencilClear() override { return true; }
+ };
+ 
+-typedef MVKCmdClearDepthStencilImage<1> MVKCmdClearDepthStencilImage1;
+-typedef MVKCmdClearDepthStencilImage<4> MVKCmdClearDepthStencilImageMulti;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdFillBuffer
+@@ -415,8 +347,6 @@ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+ 	MVKBuffer* _dstBuffer;
+     VkDeviceSize _dstOffset;
+     uint32_t _wordCount;
+@@ -440,9 +370,7 @@ public:
+     void encode(MVKCommandEncoder* cmdEncoder) override;
+ 
+ protected:
+-	MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) override;
+-
+-	MVKSmallVector<uint8_t> _srcDataCache;
++	MVKCommandVector<uint8_t> _srcDataCache;
+ 	MVKBuffer* _dstBuffer;
+     VkDeviceSize _dstOffset;
+     VkDeviceSize _dataSize;
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCmdTransfer.mm b/MoltenVK/MoltenVK/Commands/MVKCmdTransfer.mm
+index a3ef8cb3..78348fc2 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCmdTransfer.mm
++++ b/MoltenVK/MoltenVK/Commands/MVKCmdTransfer.mm
+@@ -45,8 +45,7 @@ static inline MTLSize mvkClampMTLSize(MTLSize size, MTLOrigin origin, MTLSize ma
+ #pragma mark -
+ #pragma mark MVKCmdCopyImage
+ 
+-template <size_t N>
+-VkResult MVKCmdCopyImage<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdCopyImage::setContent(MVKCommandBuffer* cmdBuff,
+ 										VkImage srcImage,
+ 										VkImageLayout srcImageLayout,
+ 										VkImage dstImage,
+@@ -59,7 +58,7 @@ static inline MTLSize mvkClampMTLSize(MTLSize size, MTLOrigin origin, MTLSize ma
+ 	_dstImage = (MVKImage*)dstImage;
+ 	_dstLayout = dstImageLayout;
+ 
+-	_vkImageCopies.clear();		// Clear for reuse
++	_vkImageCopies.alc.cmdBuffer = cmdBuff;
+     for (uint32_t regionIdx = 0; regionIdx < regionCount; regionIdx++) {
+         auto& vkIR = pRegions[regionIdx];
+         VkImageCopy2 vkIR2 = {
+@@ -78,8 +77,7 @@ static inline MTLSize mvkClampMTLSize(MTLSize size, MTLOrigin origin, MTLSize ma
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-VkResult MVKCmdCopyImage<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdCopyImage::setContent(MVKCommandBuffer* cmdBuff,
+                                         const VkCopyImageInfo2* pCopyImageInfo) {
+     _srcImage = (MVKImage*)pCopyImageInfo->srcImage;
+     _srcLayout = pCopyImageInfo->srcImageLayout;
+@@ -87,7 +85,7 @@ static inline MTLSize mvkClampMTLSize(MTLSize size, MTLOrigin origin, MTLSize ma
+     _dstImage = (MVKImage*)pCopyImageInfo->dstImage;
+     _dstLayout = pCopyImageInfo->dstImageLayout;
+ 
+-    _vkImageCopies.clear();        // Clear for reuse
++    _vkImageCopies.alc.cmdBuffer = cmdBuff;
+     _vkImageCopies.reserve(pCopyImageInfo->regionCount);
+     for (uint32_t regionIdx = 0; regionIdx < pCopyImageInfo->regionCount; regionIdx++) {
+         auto& vkIR = pCopyImageInfo->pRegions[regionIdx];
+@@ -113,8 +111,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+     return format;
+ }
+ 
+-template <size_t N>
+-inline VkResult MVKCmdCopyImage<N>::validate(MVKCommandBuffer* cmdBuff, const VkImageCopy2* region) {
++inline VkResult MVKCmdCopyImage::validate(MVKCommandBuffer* cmdBuff, const VkImageCopy2* region) {
+     uint8_t srcPlaneIndex = MVKImage::getPlaneFromVkImageAspectFlags(region->srcSubresource.aspectMask);
+     uint8_t dstPlaneIndex = MVKImage::getPlaneFromVkImageAspectFlags(region->dstSubresource.aspectMask);
+ 
+@@ -132,8 +129,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ }
+ 
+ 
+-template <size_t N>
+-void MVKCmdCopyImage<N>::encode(MVKCommandEncoder* cmdEncoder, MVKCommandUse commandUse) {
++void MVKCmdCopyImage::encode(MVKCommandEncoder* cmdEncoder, MVKCommandUse commandUse) {
+     MVKPixelFormats* pixFmts = cmdEncoder->getPixelFormats();
+     uint32_t copyCnt = (uint32_t)_vkImageCopies.size();
+     VkBufferImageCopy vkSrcCopies[copyCnt];
+@@ -303,7 +299,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+         tempBuffData.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+         VkBuffer tempBuff = (VkBuffer)cmdEncoder->getCommandEncodingPool()->getTransferMVKBuffer(tempBuffData);
+ 
+-        MVKCmdBufferImageCopy<N> cpyCmd;
++        MVKCmdBufferImageCopy cpyCmd;
+ 
+         // Copy from source image to buffer
+         // Create and execute a temporary buffer image command.
+@@ -319,15 +315,11 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+     }
+ }
+ 
+-template class MVKCmdCopyImage<1>;
+-template class MVKCmdCopyImage<4>;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdBlitImage
+ 
+-template <size_t N>
+-VkResult MVKCmdBlitImage<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdBlitImage::setContent(MVKCommandBuffer* cmdBuff,
+ 										VkImage srcImage,
+ 										VkImageLayout srcImageLayout,
+ 										VkImage dstImage,
+@@ -345,7 +337,8 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 
+ 	bool isDestUnwritableLinear = !cmdBuff->getMetalFeatures().renderLinearTextures && _dstImage->getIsLinear();
+ 
+-	_vkImageBlits.clear();		// Clear for reuse
++	_vkImageBlits.alc.cmdBuffer = cmdBuff;
++	_vkImageBlits.reserve(regionCount);
+ 	for (uint32_t rIdx = 0; rIdx < regionCount; rIdx++) {
+ 		auto& vkIB = pRegions[rIdx];
+         VkImageBlit2 vkIB2 = {
+@@ -357,14 +350,13 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+         if (auto validation = validate(cmdBuff, &vkIB2, isDestUnwritableLinear); validation != VK_SUCCESS)
+             return validation;
+         
+-		_vkImageBlits.push_back(vkIB2);
++		_vkImageBlits.emplace_back(vkIB2);
+ 	}
+ 
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-VkResult MVKCmdBlitImage<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdBlitImage::setContent(MVKCommandBuffer* cmdBuff,
+                                         const VkBlitImageInfo2* pBlitImageInfo) {
+ 
+     _srcImage = (MVKImage*)pBlitImageInfo->srcImage;
+@@ -376,7 +368,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 
+     bool isDestUnwritableLinear = !cmdBuff->getMetalFeatures().renderLinearTextures && _dstImage->getIsLinear();
+ 
+-    _vkImageBlits.clear();        // Clear for reuse
++    _vkImageBlits.alc.cmdBuffer = cmdBuff;
+     _vkImageBlits.reserve(pBlitImageInfo->regionCount);
+     for (uint32_t rIdx = 0; rIdx < pBlitImageInfo->regionCount; rIdx++) {
+         auto& vkIB = pBlitImageInfo->pRegions[rIdx];
+@@ -390,8 +382,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+     return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-inline VkResult MVKCmdBlitImage<N>::validate(MVKCommandBuffer *cmdBuff, const VkImageBlit2 *region, bool isDestUnwritableLinear) {
++inline VkResult MVKCmdBlitImage::validate(MVKCommandBuffer *cmdBuff, const VkImageBlit2 *region, bool isDestUnwritableLinear) {
+     // Validate - macOS linear images cannot be a scaling or inversion destination
+     if (isDestUnwritableLinear && !(canCopyFormats(*region) && canCopy(*region)) ) {
+         return cmdBuff->reportError(VK_ERROR_FEATURE_NOT_PRESENT, "vkCmdBlitImage(): Scaling or inverting to a linear destination image is not supported.");
+@@ -399,8 +390,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+     return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-bool MVKCmdBlitImage<N>::canCopyFormats(const VkImageBlit2& region) {
++bool MVKCmdBlitImage::canCopyFormats(const VkImageBlit2& region) {
+     uint8_t srcPlaneIndex = MVKImage::getPlaneFromVkImageAspectFlags(region.srcSubresource.aspectMask);
+     uint8_t dstPlaneIndex = MVKImage::getPlaneFromVkImageAspectFlags(region.dstSubresource.aspectMask);
+ 	return ((_srcImage->getMTLPixelFormat(srcPlaneIndex) == _dstImage->getMTLPixelFormat(dstPlaneIndex)) &&
+@@ -409,16 +399,14 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ }
+ 
+ // The source and destination sizes must be equal and not be negative in any direction
+-template <size_t N>
+-bool MVKCmdBlitImage<N>::canCopy(const VkImageBlit2& region) {
++bool MVKCmdBlitImage::canCopy(const VkImageBlit2& region) {
+ 	VkOffset3D srcSize = mvkVkOffset3DDifference(region.srcOffsets[1], region.srcOffsets[0]);
+ 	VkOffset3D dstSize = mvkVkOffset3DDifference(region.dstOffsets[1], region.dstOffsets[0]);
+ 	return (mvkVkOffset3DsAreEqual(srcSize, dstSize) &&
+ 			(srcSize.x >= 0) && (srcSize.y >= 0) && (srcSize.z >= 0));
+ }
+ 
+-template <size_t N>
+-void MVKCmdBlitImage<N>::populateVertices(MVKVertexPosTex* vertices, const VkImageBlit2& region) {
++void MVKCmdBlitImage::populateVertices(MVKVertexPosTex* vertices, const VkImageBlit2& region) {
+     const VkOffset3D& so0 = region.srcOffsets[0];
+     const VkOffset3D& so1 = region.srcOffsets[1];
+     const VkOffset3D& do0 = region.dstOffsets[0];
+@@ -478,8 +466,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+     pVtx->texCoord.y = (1.0 - srcTR.y);
+ }
+ 
+-template <size_t N>
+-void MVKCmdBlitImage<N>::encode(MVKCommandEncoder* cmdEncoder, MVKCommandUse commandUse) {
++void MVKCmdBlitImage::encode(MVKCommandEncoder* cmdEncoder, MVKCommandUse commandUse) {
+ 
+ 	auto& mtlFeats = cmdEncoder->getMetalFeatures();
+ 	size_t vkIBCnt = _vkImageBlits.size();
+@@ -514,7 +501,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 
+ 	// Perform those BLITs that can be covered by simple texture copying.
+ 	if (copyCnt) {
+-		MVKCmdCopyImage<N> copyCmd;
++		MVKCmdCopyImage copyCmd;
+ 		copyCmd.setContent(cmdEncoder->_cmdBuffer,
+ 						   (VkImage)_srcImage, _srcLayout,
+ 						   (VkImage)_dstImage, _dstLayout,
+@@ -724,15 +711,11 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+     }
+ }
+ 
+-template class MVKCmdBlitImage<1>;
+-template class MVKCmdBlitImage<4>;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdResolveImage
+ 
+-template <size_t N>
+-VkResult MVKCmdResolveImage<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdResolveImage::setContent(MVKCommandBuffer* cmdBuff,
+ 										   VkImage srcImage,
+ 										   VkImageLayout srcImageLayout,
+ 										   VkImage dstImage,
+@@ -744,7 +727,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+     _dstImage = (MVKImage*)dstImage;
+     _dstLayout = dstImageLayout;
+ 
+-	_vkImageResolves.clear();	// Clear for reuse
++	_vkImageResolves.alc.cmdBuffer = cmdBuff;
+ 	_vkImageResolves.reserve(regionCount);
+     for (uint32_t regionIdx = 0; regionIdx < regionCount; regionIdx++) {
+         auto& vkIR = pRegions[regionIdx];
+@@ -764,15 +747,14 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-VkResult MVKCmdResolveImage<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdResolveImage::setContent(MVKCommandBuffer* cmdBuff,
+                                            const VkResolveImageInfo2* pResolveImageInfo) {
+     _srcImage = (MVKImage*)pResolveImageInfo->srcImage;
+     _srcLayout = pResolveImageInfo->srcImageLayout;
+     _dstImage = (MVKImage*)pResolveImageInfo->dstImage;
+     _dstLayout = pResolveImageInfo->dstImageLayout;
+ 
+-    _vkImageResolves.clear();    // Clear for reuse
++    _vkImageResolves.alc.cmdBuffer = cmdBuff;
+     _vkImageResolves.reserve(pResolveImageInfo->regionCount);
+     for (uint32_t regionIdx = 0; regionIdx < pResolveImageInfo->regionCount; regionIdx++) {
+         auto& vkIR = pResolveImageInfo->pRegions[regionIdx];
+@@ -786,8 +768,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+     return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-inline VkResult MVKCmdResolveImage<N>::validate(MVKCommandBuffer* cmdBuff, const VkImageResolve2* region) {
++inline VkResult MVKCmdResolveImage::validate(MVKCommandBuffer* cmdBuff, const VkImageResolve2* region) {
+     uint8_t dstPlaneIndex = MVKImage::getPlaneFromVkImageAspectFlags(region->dstSubresource.aspectMask);
+ 
+     // Validate
+@@ -798,8 +779,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+     return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-void MVKCmdResolveImage<N>::encode(MVKCommandEncoder* cmdEncoder) {
++void MVKCmdResolveImage::encode(MVKCommandEncoder* cmdEncoder) {
+ 
+ 	auto& mtlFeats = cmdEncoder->getMetalFeatures();
+ 	size_t vkIRCnt = _vkImageResolves.size();
+@@ -899,7 +879,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 
+ 		if (expCnt) {
+ 			// Expand the current content of the destination image to the temporary transfer image.
+-			MVKCmdBlitImage<N> expCmd;
++			MVKCmdBlitImage expCmd;
+ 			expCmd.setContent(cmdEncoder->_cmdBuffer,
+ 							  (VkImage)_dstImage, _dstLayout, (VkImage)xfrImage, _dstLayout,
+ 							  expCnt, expansionRegions, VK_FILTER_LINEAR);
+@@ -907,7 +887,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 		}
+ 
+ 		// Copy the resolve regions of the source image to the temporary transfer image.
+-		MVKCmdCopyImage<N> copyCmd;
++		MVKCmdCopyImage copyCmd;
+ 		copyCmd.setContent(cmdEncoder->_cmdBuffer,
+ 						   (VkImage)_srcImage, _srcLayout,
+ 						   (VkImage)xfrImage, _dstLayout,
+@@ -953,9 +933,6 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 	}
+ }
+ 
+-template class MVKCmdResolveImage<1>;
+-template class MVKCmdResolveImage<4>;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdCopyBuffer
+@@ -967,8 +944,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 	uint32_t size;
+ } MVKCmdCopyBufferInfo;
+ 
+-template <size_t N>
+-VkResult MVKCmdCopyBuffer<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdCopyBuffer::setContent(MVKCommandBuffer* cmdBuff,
+ 										 VkBuffer srcBuffer,
+ 										 VkBuffer destBuffer,
+ 										 uint32_t regionCount,
+@@ -977,7 +953,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 	_dstBuffer = (MVKBuffer*)destBuffer;
+ 
+ 	// Add buffer regions
+-	_bufferCopyRegions.clear();	// Clear for reuse
++	_bufferCopyRegions.alc.cmdBuffer = cmdBuff;
+ 	_bufferCopyRegions.reserve(regionCount);
+ 	for (uint32_t i = 0; i < regionCount; i++) {
+         auto& region = pRegions[i];
+@@ -991,14 +967,13 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-VkResult MVKCmdCopyBuffer<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdCopyBuffer::setContent(MVKCommandBuffer* cmdBuff,
+                                          const VkCopyBufferInfo2* pCopyBufferInfo) {
+     _srcBuffer = (MVKBuffer*)pCopyBufferInfo->srcBuffer;
+     _dstBuffer = (MVKBuffer*)pCopyBufferInfo->dstBuffer;
+ 
+     // Add buffer regions
+-    _bufferCopyRegions.clear();    // Clear for reuse
++    _bufferCopyRegions.alc.cmdBuffer = cmdBuff;
+     _bufferCopyRegions.reserve(pCopyBufferInfo->regionCount);
+     for (uint32_t i = 0; i < pCopyBufferInfo->regionCount; i++) {
+         _bufferCopyRegions.push_back(pCopyBufferInfo->pRegions[i]);
+@@ -1007,8 +982,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+     return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-void MVKCmdCopyBuffer<N>::encode(MVKCommandEncoder* cmdEncoder) {
++void MVKCmdCopyBuffer::encode(MVKCommandEncoder* cmdEncoder) {
+ 	id<MTLBuffer> srcMTLBuff = _srcBuffer->getMTLBuffer();
+ 	NSUInteger srcMTLBuffOffset = _srcBuffer->getMTLBufferOffset();
+ 
+@@ -1050,15 +1024,11 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 	}
+ }
+ 
+-template class MVKCmdCopyBuffer<1>;
+-template class MVKCmdCopyBuffer<4>;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdBufferImageCopy
+ 
+-template <size_t N>
+-VkResult MVKCmdBufferImageCopy<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdBufferImageCopy::setContent(MVKCommandBuffer* cmdBuff,
+ 											  VkBuffer buffer,
+ 											  VkImage image,
+ 											  VkImageLayout imageLayout,
+@@ -1070,7 +1040,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+     _toImage = toImage;
+ 
+     // Add buffer regions
+-    _bufferImageCopyRegions.clear();     // Clear for reuse
++    _bufferImageCopyRegions.alc.cmdBuffer = cmdBuff;
+     _bufferImageCopyRegions.reserve(regionCount);
+     for (uint32_t i = 0; i < regionCount; i++) {
+         const auto& region = pRegions[i];
+@@ -1085,34 +1055,31 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 	return validate(cmdBuff);
+ }
+ 
+-template <size_t N>
+-VkResult MVKCmdBufferImageCopy<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdBufferImageCopy::setContent(MVKCommandBuffer* cmdBuff,
+                                               const VkCopyBufferToImageInfo2* pCopyBufferToImageInfo) {
+     _buffer = (MVKBuffer*)pCopyBufferToImageInfo->srcBuffer;
+     _image = (MVKImage*)pCopyBufferToImageInfo->dstImage;
+     _toImage = true;
+     
+-    _bufferImageCopyRegions.clear();     // Clear for reuse
++    _bufferImageCopyRegions.alc.cmdBuffer = cmdBuff;
+     _bufferImageCopyRegions.resize(pCopyBufferToImageInfo->regionCount);
+     std::memcpy(_bufferImageCopyRegions.data(), pCopyBufferToImageInfo->pRegions, pCopyBufferToImageInfo->regionCount * sizeof(VkBufferImageCopy2));
+     return validate(cmdBuff);
+ }
+ 
+-template <size_t N>
+-VkResult MVKCmdBufferImageCopy<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdBufferImageCopy::setContent(MVKCommandBuffer* cmdBuff,
+                                               const VkCopyImageToBufferInfo2* pCopyImageToBufferInfo) {
+     _buffer = (MVKBuffer*)pCopyImageToBufferInfo->dstBuffer;
+     _image = (MVKImage*)pCopyImageToBufferInfo->srcImage;
+     _toImage = false;
+     
+-    _bufferImageCopyRegions.clear();     // Clear for reuse
++    _bufferImageCopyRegions.alc.cmdBuffer = cmdBuff;
+     _bufferImageCopyRegions.resize(pCopyImageToBufferInfo->regionCount);
+     std::memcpy(_bufferImageCopyRegions.data(), pCopyImageToBufferInfo->pRegions, pCopyImageToBufferInfo->regionCount * sizeof(VkBufferImageCopy2));
+     return validate(cmdBuff);
+ }
+ 
+-template <size_t N>
+-inline VkResult MVKCmdBufferImageCopy<N>::validate(MVKCommandBuffer *cmdBuff) {
++inline VkResult MVKCmdBufferImageCopy::validate(MVKCommandBuffer *cmdBuff) {
+     for (auto& region : _bufferImageCopyRegions) {
+         if (!_image->hasExpectedTexelSize()) {
+             MTLPixelFormat mtlPixFmt = _image->getMTLPixelFormat(MVKImage::getPlaneFromVkImageAspectFlags(region.imageSubresource.aspectMask));
+@@ -1123,8 +1090,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+     return VK_SUCCESS;
+ }
+     
+-template <size_t N>
+-void MVKCmdBufferImageCopy<N>::encode(MVKCommandEncoder* cmdEncoder) {
++void MVKCmdBufferImageCopy::encode(MVKCommandEncoder* cmdEncoder) {
+     id<MTLBuffer> mtlBuffer = _buffer->getMTLBuffer();
+     if ( !mtlBuffer ) { return; }
+ 
+@@ -1218,8 +1184,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+     }
+ }
+ 
+-template <size_t N>
+-bool MVKCmdBufferImageCopy<N>::isArrayTexture() {
++bool MVKCmdBufferImageCopy::isArrayTexture() {
+ 	MTLTextureType mtlTexType = _image->getMTLTextureType();
+ 	return (mtlTexType == MTLTextureType3D ||
+ 			mtlTexType == MTLTextureType2DArray ||
+@@ -1227,17 +1192,11 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 			mtlTexType == MTLTextureType1DArray);
+ }
+ 
+-template class MVKCmdBufferImageCopy<1>;
+-template class MVKCmdBufferImageCopy<4>;	// To support MVKCmdCopyImage
+-template class MVKCmdBufferImageCopy<8>;
+-template class MVKCmdBufferImageCopy<16>;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdClearAttachments
+ 
+-template <size_t N>
+-VkResult MVKCmdClearAttachments<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdClearAttachments::setContent(MVKCommandBuffer* cmdBuff,
+ 											   uint32_t attachmentCount,
+ 											   const VkClearAttachment* pAttachments,
+ 											   uint32_t rectCount,
+@@ -1266,7 +1225,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+         }
+     }
+ 
+-    _clearRects.clear();		// Clear for reuse
++    _clearRects.alc.cmdBuffer = cmdBuff;
+     _clearRects.reserve(rectCount);
+     for (uint32_t i = 0; i < rectCount; i++) {
+         _clearRects.push_back(pRects[i]);
+@@ -1276,8 +1235,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ }
+ 
+ // Returns the total number of vertices needed to clear all layers of all rectangles.
+-template <size_t N>
+-uint32_t MVKCmdClearAttachments<N>::getVertexCount(MVKCommandEncoder* cmdEncoder) {
++uint32_t MVKCmdClearAttachments::getVertexCount(MVKCommandEncoder* cmdEncoder) {
+ 	uint32_t vtxCnt = 0;
+ 	if (cmdEncoder->getSubpass()->isMultiview()) {
+ 		// In this case, all the layer counts will be one. We want to use the number of views in the current multiview pass.
+@@ -1291,8 +1249,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ }
+ 
+ // Populates the vertices for all clear rectangles within an attachment of the specified size.
+-template <size_t N>
+-void MVKCmdClearAttachments<N>::populateVertices(MVKCommandEncoder* cmdEncoder, simd::float4* vertices,
++void MVKCmdClearAttachments::populateVertices(MVKCommandEncoder* cmdEncoder, simd::float4* vertices,
+ 												 float attWidth, float attHeight) {
+ 	uint32_t vtxIdx = 0;
+     for (auto& rect : _clearRects) {
+@@ -1302,8 +1259,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 
+ // Populates the vertices, starting at the vertex, from the specified rectangle within
+ // an attachment of the specified size. Returns the next vertex that needs to be populated.
+-template <size_t N>
+-uint32_t MVKCmdClearAttachments<N>::populateVertices(MVKCommandEncoder* cmdEncoder,
++uint32_t MVKCmdClearAttachments::populateVertices(MVKCommandEncoder* cmdEncoder,
+ 													 simd::float4* vertices,
+ 													 uint32_t startVertex,
+ 													 VkClearRect& clearRect,
+@@ -1374,8 +1330,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 	return vtxIdx;
+ }
+ 
+-template <size_t N>
+-void MVKCmdClearAttachments<N>::encode(MVKCommandEncoder* cmdEncoder) {
++void MVKCmdClearAttachments::encode(MVKCommandEncoder* cmdEncoder) {
+ 
+ 	uint32_t vtxCnt = getVertexCount(cmdEncoder);
+ 	simd::float4 vertices[vtxCnt];
+@@ -1463,8 +1418,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 	}
+ }
+ 
+-template <size_t N>
+-NSString* MVKCmdClearAttachments<N>::getMTLDebugGroupLabel() {
++NSString* MVKCmdClearAttachments::getMTLDebugGroupLabel() {
+ 	switch (_commandUse) {
+ 		case kMVKCommandUseClearAttachments:    return @"vkCmdClearAttachments";
+ 		case kMVKCommandUseBeginRenderPass:     return @"Clear Render Area on Begin Renderpass";
+@@ -1474,21 +1428,11 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 	}
+ }
+ 
+-template class MVKCmdClearAttachments<1>;
+-template class MVKCmdClearAttachments<4>;
+-
+-template class MVKCmdClearSingleAttachment<1>;
+-template class MVKCmdClearSingleAttachment<4>;
+-
+-template class MVKCmdClearMultiAttachments<1>;
+-template class MVKCmdClearMultiAttachments<4>;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdClearImage
+ 
+-template <size_t N>
+-VkResult MVKCmdClearImage<N>::setContent(MVKCommandBuffer* cmdBuff,
++VkResult MVKCmdClearImage::setContent(MVKCommandBuffer* cmdBuff,
+ 										 VkImage image,
+ 										 VkImageLayout imageLayout,
+ 										 const VkClearValue& clearValue,
+@@ -1498,7 +1442,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 	_clearValue = clearValue;
+ 
+     // Add subresource ranges
+-    _subresourceRanges.clear();		// Clear for reuse
++    _subresourceRanges.alc.cmdBuffer = cmdBuff;
+     _subresourceRanges.reserve(rangeCount);
+     bool isDS = isDepthStencilClear();
+     for (uint32_t rangeIdx = 0; rangeIdx < rangeCount; rangeIdx++) {
+@@ -1524,8 +1468,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+ 	return VK_SUCCESS;
+ }
+ 
+-template <size_t N>
+-void MVKCmdClearImage<N>::encode(MVKCommandEncoder* cmdEncoder) {
++void MVKCmdClearImage::encode(MVKCommandEncoder* cmdEncoder) {
+ 	bool isDS = isDepthStencilClear();
+ 	NSString* mtlRendEncName = (isDS
+ 								? mvkMTLRenderCommandEncoderLabel(kMVKCommandUseClearDepthStencilImage)
+@@ -1672,15 +1615,6 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+     }
+ }
+ 
+-template class MVKCmdClearImage<1>;
+-template class MVKCmdClearImage<4>;
+-
+-template class MVKCmdClearColorImage<1>;
+-template class MVKCmdClearColorImage<4>;
+-
+-template class MVKCmdClearDepthStencilImage<1>;
+-template class MVKCmdClearDepthStencilImage<4>;
+-
+ 
+ #pragma mark -
+ #pragma mark MVKCmdFillBuffer
+@@ -1761,6 +1695,7 @@ static inline MTLPixelFormat getDepthStencilAspectFormat(const MTLPixelFormat fo
+     _dstOffset = dstOffset;
+     _dataSize = dataSize;
+ 
++    _srcDataCache.alc.cmdBuffer = cmdBuff;
+     _srcDataCache.reserve(_dataSize);
+     memcpy(_srcDataCache.data(), pData, _dataSize);
+ 
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCommand.h b/MoltenVK/MoltenVK/Commands/MVKCommand.h
+index 76c52c94..8fb5dcbf 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCommand.h
++++ b/MoltenVK/MoltenVK/Commands/MVKCommand.h
+@@ -20,32 +20,13 @@
+ 
+ 
+ #include "MVKObjectPool.h"
++#include "MVKSmallVector.h"
+ 
+ class MVKCommandBuffer;
+ class MVKCommandEncoder;
+ class MVKCommandPool;
+ 
+ 
+-#pragma mark -
+-#pragma mark MVKCommandTypePool
+-
+-/** A pool of MVKCommand instances of a particular type. */
+-template <class T>
+-class MVKCommandTypePool : public MVKObjectPool<T> {
+-
+-public:
+-
+-	/** Returns the Vulkan API opaque object controlling this object. */
+-	MVKVulkanAPIObject* getVulkanAPIObject() override { return nullptr; }
+-
+-	MVKCommandTypePool(bool isPooling = true) : MVKObjectPool<T>(isPooling) {}
+-
+-protected:
+-	T* newObject() override { return new T(); }
+-
+-};
+-
+-
+ #pragma mark -
+ #pragma mark MVKCommand
+ 
+@@ -69,13 +50,73 @@ public:
+ 
+ protected:
+ 	friend MVKCommandBuffer;
++};
++
++
++void *mvkPushCommandMemory(MVKCommandBuffer *cmdBuffer, size_t size);
++
++/**
++ * Allocator for MVKCommandVector below.
++ */
++template <typename T>
++class MVKCommandStorageAllocator {
++public:
++    typedef T value_type;
++    MVKCommandBuffer *cmdBuffer        = nullptr;
++    T                *ptr              = nullptr;
++    size_t           num_elements_used = 0;
++    size_t           capacity          = 0;
++
++public:
++    const T &operator[](const size_t i) const { return ptr[i]; }
++    T       &operator[](const size_t i)       { return ptr[i]; }
++
++    size_t size() const { return num_elements_used; }
++
++    void swap(MVKCommandStorageAllocator &a) {
++        auto copy = *this;
++        *this = a;
++        a = copy;
++    }
++
++    template<class S, class... Args> void construct(S *_ptr, Args&&... _args) {
++        *_ptr = S(std::forward<Args>(_args)...);
++    }
++
++    template<class S> void destruct(S *_ptr) {}
+ 
+-	// Returns the command type pool used by this command, from the command pool.
+-	// This function is overridden in each concrete subclass declaration, but the implementation of
+-	// this function in each subclass is automatically generated in the MVKCommandPool implementation.
+-	virtual MVKCommandTypePool<MVKCommand>* getTypePool(MVKCommandPool* cmdPool) = 0;
++    void allocate(const size_t num_elements_to_reserve) {
++        ptr = (T *)mvkPushCommandMemory(cmdBuffer, num_elements_to_reserve * sizeof(T));
++        num_elements_used = 0;
++        capacity = num_elements_to_reserve;
++    }
++
++    void re_allocate(const size_t num_elements_to_reserve) {
++        auto new_ptr = mvkPushCommandMemory(cmdBuffer, num_elements_to_reserve * sizeof(T));
++        memcpy(new_ptr, ptr, num_elements_used * sizeof(T));
++        ptr = (T *)new_ptr;
++        capacity = num_elements_to_reserve;
++    }
++
++    void shrink_to_fit() {}
++
++    void deallocate() {}
++
++    size_t get_capacity() const { return capacity; }
++
++    template<class S> void destruct_all() {
++        num_elements_used = 0;
++    }
+ };
+ 
++#pragma mark -
++#pragma mark MVKCommandVector
++
++/**
++ * Array for storing dynamic amounts of data in the command buffer.
++ */
++template<typename Type>
++using MVKCommandVector = MVKSmallVectorImpl<Type, MVKCommandStorageAllocator<Type>>;
+ 
+ #pragma mark -
+ #pragma mark MVKSingleValueCommand
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCommandBuffer.h b/MoltenVK/MoltenVK/Commands/MVKCommandBuffer.h
+index 2a6dcb88..a8897f73 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCommandBuffer.h
++++ b/MoltenVK/MoltenVK/Commands/MVKCommandBuffer.h
+@@ -119,6 +119,25 @@ public:
+ 	/** Adds the specified execution command at the end of this command buffer. */
+ 	void addCommand(MVKCommand* command);
+ 
++	/** Destroy the specified execution command when the command buffer is reset. */
++	inline void destroyOnReset(MVKCommand* command) { _destroyList.push_back(command); }
++
++	/** Allocates memory for recorded commands, allocating new memory chunks, if needed.  */
++	inline void *pushCommandMemory(size_t size) {
++		size = (uint32_t)mvkAlignByteCount(size, 8);
++
++		if (size + _commandChunkOffset > _commandChunkSize) {
++			_commandChunkIndex++;
++			_commandChunkOffset = 0;
++		}
++
++		if (_commandChunkIndex >= _commandChunks.size()) { _commandChunks.push_back(new uint8_t[_commandChunkSize]); }
++
++		auto result = _commandChunks[_commandChunkIndex] + _commandChunkOffset;
++		_commandChunkOffset += size;
++		return result;
++	}
++
+ 	/** Returns the number of commands currently in this command buffer. */
+ 	uint32_t getCommandCount() { return _commandCount; }
+ 
+@@ -192,7 +211,6 @@ protected:
+ 	void init(const VkCommandBufferAllocateInfo* pAllocateInfo);
+ 	bool canExecute();
+ 	void clearPrefilledMTLCommandBuffer();
+-    void releaseCommands(MVKCommand* command);
+ 	void releaseRecordedCommands();
+ 	void flushImmediateCmdEncoder();
+ 	void checkDeferredEncoding();
+@@ -204,6 +222,11 @@ protected:
+ 	MVKSmallVector<uint32_t, kMVKDefaultAttachmentCount> _secondaryInheritanceColorAttachmentLocations;
+ 	MVKSmallVector<uint32_t, kMVKDefaultAttachmentCount> _secondaryInheritanceColorAttachmentInputIndices;
+ 	MVKCommandPool* _commandPool;
++    uint32_t _commandChunkSize = 64 * KIBI;
++    uint32_t _commandChunkIndex = 0;
++    uint32_t _commandChunkOffset = 0;
++    MVKSmallVector<MVKCommand *> _destroyList;
++    MVKSmallVector<uint8_t *> _commandChunks;
+ 	VkCommandBufferInheritanceInfo _secondaryInheritanceInfo;
+ 	VkCommandBufferInheritanceRenderingInfo _secondaryInheritanceRenderingInfo;
+ 	VkRenderingAttachmentLocationInfo _secondaryInheritanceRenderingAttachmentLocationInfo;
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCommandBuffer.mm b/MoltenVK/MoltenVK/Commands/MVKCommandBuffer.mm
+index 707c2672..c4abd9a6 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCommandBuffer.mm
++++ b/MoltenVK/MoltenVK/Commands/MVKCommandBuffer.mm
+@@ -189,18 +189,14 @@
+ 	}
+ }
+ 
+-void MVKCommandBuffer::releaseCommands(MVKCommand* command) {
+-    while(command) {
+-        MVKCommand* nextCommand = command->_next; // Establish next before returning current to pool.
+-        (command->getTypePool(getCommandPool()))->returnObject(command);
+-        command = nextCommand;
+-    }
+-}
+-
+ void MVKCommandBuffer::releaseRecordedCommands() {
+-    releaseCommands(_head);
++	for (auto cmd: _destroyList) cmd->~MVKCommand();
++	_destroyList.clear();
++
+ 	_head = nullptr;
+ 	_tail = nullptr;
++	_commandChunkIndex = 0;
++	_commandChunkOffset = 0;
+ }
+ 
+ void MVKCommandBuffer::flushImmediateCmdEncoder() {
+@@ -287,10 +283,7 @@
+ 
+     if(_immediateCmdEncoder) {
+         _immediateCmdEncoder->encodeCommands(command);
+-        if( !_isReusable ) {
+-            releaseCommands(command);
+-            return;
+-        }
++        if( !_isReusable ) return;
+     }
+ 
+     if (_tail) { _tail->_next = command; }
+@@ -377,6 +370,7 @@
+ }
+ 
+ MVKCommandBuffer::~MVKCommandBuffer() {
++	for (auto p : _commandChunks) delete [] p;
+ 	reset(0);
+ }
+ 
+@@ -981,7 +975,7 @@ static MVKBarrierStage commandUseToBarrierStage(MVKCommandUse use) {
+ 
+ 		// Create and execute a temporary clear attachments command.
+ 		// To be threadsafe...do NOT acquire and return the command from the pool.
+-		MVKCmdClearMultiAttachments<1> cmd;
++		MVKCmdClearMultiAttachments cmd;
+ 		cmd.setContent(_cmdBuffer, clearAttCnt, clearAtts.data(), 1, &clearRect, cmdUse);
+ 		cmd.encode(this);
+ 	} else {
+@@ -993,11 +987,11 @@ static MVKBarrierStage commandUseToBarrierStage(MVKCommandUse use) {
+ 			// Create and execute a temporary clear attachments command.
+ 			// To be threadsafe...do NOT acquire and return the command from the pool.
+ 			if (clearRects.size() == 1) {
+-				MVKCmdClearSingleAttachment<1> cmd;
++				MVKCmdClearSingleAttachment cmd;
+ 				cmd.setContent(_cmdBuffer, 1, &clearAtt, (uint32_t)clearRects.size(), clearRects.data(), cmdUse);
+ 				cmd.encode(this);
+ 			} else {
+-				MVKCmdClearSingleAttachment<4> cmd;
++				MVKCmdClearSingleAttachment cmd;
+ 				cmd.setContent(_cmdBuffer, 1, &clearAtt, (uint32_t)clearRects.size(), clearRects.data(), cmdUse);
+ 				cmd.encode(this);
+ 			}
+@@ -1327,6 +1321,9 @@ static bool shouldStartNewEncoder(MVKCommandUse prev, MVKCommandUse next) {
+     _pActivatedQueries = nullptr;
+ }
+ 
++void *mvkPushCommandMemory(MVKCommandBuffer *cmdBuffer, size_t size) {
++    return cmdBuffer->pushCommandMemory(size);
++}
+ 
+ #pragma mark Construction
+ 
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCommandPool.h b/MoltenVK/MoltenVK/Commands/MVKCommandPool.h
+index 61e1c545..41888391 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCommandPool.h
++++ b/MoltenVK/MoltenVK/Commands/MVKCommandPool.h
+@@ -59,12 +59,6 @@ public:
+ 	/** Returns the debug report object type of this object. */
+ 	VkDebugReportObjectTypeEXT getVkDebugReportObjectType() override { return VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_POOL_EXT; }
+ 
+-	// Command type pool member variables.
+-	// Each has a form similar to (here for a draw command):  MVKCommandTypePool<MVKCmdDraw> _cmdDrawPool;
+-#	define MVK_CMD_TYPE_POOL(cmdType)  MVKCommandTypePool<MVKCmd ##cmdType> _cmd ##cmdType ##Pool;
+-#	include "MVKCommandTypePools.def"
+-
+-
+ #pragma mark Command resources
+ 
+ 	/** Allocates command buffers from this pool. */
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCommandPool.mm b/MoltenVK/MoltenVK/Commands/MVKCommandPool.mm
+index 9d32b1b5..49d4fbcf 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCommandPool.mm
++++ b/MoltenVK/MoltenVK/Commands/MVKCommandPool.mm
+@@ -83,8 +83,7 @@
+ 
+ // Clear the command type pool member variables.
+ void MVKCommandPool::trim() {
+-#	define MVK_CMD_TYPE_POOL(cmdType)  _cmd ##cmdType ##Pool.clear();
+-#	include "MVKCommandTypePools.def"
++	_commandBufferPool.clear();
+ }
+ 
+ 
+@@ -94,12 +93,6 @@
+ 							   const VkCommandPoolCreateInfo* pCreateInfo,
+ 							   bool usePooling) :
+ 	MVKVulkanAPIDeviceObject(device),
+-
+-// Initialize the command type pool member variables.
+-#	define MVK_CMD_TYPE_POOL_LAST(cmdType)  _cmd ##cmdType ##Pool(usePooling)
+-#	define MVK_CMD_TYPE_POOL(cmdType)  MVK_CMD_TYPE_POOL_LAST(cmdType),
+-#	include "MVKCommandTypePools.def"
+-	,
+ 	_commandBufferPool(device, usePooling),
+ 	_commandEncodingPool(this),
+ 	_queueFamilyIndex(pCreateInfo->queueFamilyIndex)
+@@ -111,15 +104,3 @@
+ 	}
+ }
+ 
+-#pragma mark -
+-#pragma mark MVKCommand subclass getTypePool() functions
+-
+-// Implementations of the MVKCommand subclass getTypePool() functions.
+-#define MVK_TMPLT_DECL  template<>
+-#define MVK_CMD_TYPE_POOL(cmdType)					  										\
+-MVKCommandTypePool<MVKCommand>* MVKCmd ##cmdType ::getTypePool(MVKCommandPool* cmdPool) {	\
+-	return (MVKCommandTypePool<MVKCommand>*)&cmdPool->_cmd  ##cmdType ##Pool;				\
+-}
+-#include "MVKCommandTypePools.def"
+-
+-
+diff --git a/MoltenVK/MoltenVK/Utility/MVKSmallVector.h b/MoltenVK/MoltenVK/Utility/MVKSmallVector.h
+index 1398156f..457be776 100755
+--- a/MoltenVK/MoltenVK/Utility/MVKSmallVector.h
++++ b/MoltenVK/MoltenVK/Utility/MVKSmallVector.h
+@@ -59,10 +59,11 @@ using MVKSmallVector = std::vector<T>;
+ template<typename Type, typename Allocator = mvk_smallvector_allocator<Type, 0>>
+ class MVKSmallVectorImpl
+ {
+-  Allocator  alc;
+-  
++
+ public:
+   using value_type = Type;
++  Allocator  alc;
++
+   class iterator
+   {
+     const MVKSmallVectorImpl *vector;
+@@ -523,10 +524,10 @@ template<typename Type, typename Allocator>
+ class MVKSmallVectorImpl<Type*, Allocator>
+ {
+ 
+-  Allocator  alc;
+-
+ public:
+   using value_type = Type*;
++    Allocator  alc;
++
+   class iterator
+   {
+     MVKSmallVectorImpl *vector;
+diff --git a/MoltenVK/MoltenVK/Vulkan/vulkan.mm b/MoltenVK/MoltenVK/Vulkan/vulkan.mm
+index bca61197..10c98118 100644
+--- a/MoltenVK/MoltenVK/Vulkan/vulkan.mm
++++ b/MoltenVK/MoltenVK/Vulkan/vulkan.mm
+@@ -114,76 +114,15 @@ static inline void MVKTraceVulkanCallEndImpl(const char* funcName, uint64_t star
+ // Create and configure a command of particular type.
+ // If the command is configured correctly, add it to the buffer,
+ // otherwise indicate the configuration error to the command buffer.
+-#define MVKAddCmd(cmdType, vkCmdBuff, ...)  													\
+-	MVKCommandBuffer* cmdBuff = MVKCommandBuffer::getMVKCommandBuffer(vkCmdBuff);				\
+-	MVKCmd ##cmdType* cmd = cmdBuff->getCommandPool()->_cmd ##cmdType ##Pool.acquireObject();	\
+-	VkResult cmdRslt = cmd->setContent(cmdBuff, ##__VA_ARGS__);									\
+-	if (cmdRslt == VK_SUCCESS) {																\
+-		cmdBuff->addCommand(cmd);																\
+-	} else {																					\
+-		cmdBuff->setConfigurationResult(cmdRslt);												\
+-	}
+-
+-// Add one of two commands, based on comparing a command parameter against a threshold value
+-#define MVKAddCmdFromThreshold(baseCmdType, value, threshold, vkCmdBuff, ...)					\
+-	if (value <= threshold) {																	\
+-		MVKAddCmd(baseCmdType ##threshold, vkCmdBuff, ##__VA_ARGS__);							\
+-	} else {																					\
+-		MVKAddCmd(baseCmdType ##Multi, vkCmdBuff, ##__VA_ARGS__);								\
+-	}
+-
+-// Add one of three commands, based on comparing a command parameter against two threshold values
+-#define MVKAddCmdFrom2Thresholds(baseCmdType, value, threshold1, threshold2, vkCmdBuff, ...)	\
+-	if (value <= threshold1) {																	\
+-		MVKAddCmd(baseCmdType ##threshold1, vkCmdBuff, ##__VA_ARGS__);							\
+-	} else if (value <= threshold2) {															\
+-		MVKAddCmd(baseCmdType ##threshold2, vkCmdBuff, ##__VA_ARGS__);							\
+-	} else {																					\
+-		MVKAddCmd(baseCmdType ##Multi, vkCmdBuff, ##__VA_ARGS__);								\
+-	}
+-
+-
+-// Add one of four commands, based on comparing a command parameter against two threshold values
+-#define MVKAddCmdFrom3Thresholds(baseCmdType, value, threshold1, threshold2, threshold3, vkCmdBuff, ...)	\
+-	if (value <= threshold1) {																				\
+-		MVKAddCmd(baseCmdType ##threshold1, vkCmdBuff, ##__VA_ARGS__);										\
+-	} else if (value <= threshold2) {																		\
+-		MVKAddCmd(baseCmdType ##threshold2, vkCmdBuff, ##__VA_ARGS__);										\
+-	} else if (value <= threshold3) {																		\
+-		MVKAddCmd(baseCmdType ##threshold3, vkCmdBuff, ##__VA_ARGS__);										\
+-	} else {																								\
+-		MVKAddCmd(baseCmdType ##Multi, vkCmdBuff, ##__VA_ARGS__);											\
+-	}
+-
+-// Add one of nine commands, based on comparing a command parameter against four threshold values
+-#define MVKAddCmdFrom5Thresholds(baseCmdType, value1, arg1Threshold1, arg1Threshold2,			\
+-								 value2, arg2Threshold1, arg2Threshold2, arg2Threshold3,		\
+-								 vkCmdBuff, ...)												\
+-	if (value1 <= arg1Threshold1 && value2 <= arg2Threshold1) {									\
+-		MVKAddCmd(baseCmdType ##arg1Threshold1 ##arg2Threshold1, vkCmdBuff, ##__VA_ARGS__);		\
+-	} else if (value1 <= arg1Threshold2 && value2 <= arg2Threshold1) {							\
+-		MVKAddCmd(baseCmdType ##arg1Threshold1 ##arg2Threshold1, vkCmdBuff, ##__VA_ARGS__);		\
+-	} else if (value1 > arg1Threshold2 && value2 <= arg2Threshold1) {							\
+-		MVKAddCmd(baseCmdType ##Multi ##arg2Threshold1, vkCmdBuff, ##__VA_ARGS__);				\
+-	} else if (value1 <= arg1Threshold1 && value2 <= arg2Threshold2) {							\
+-		MVKAddCmd(baseCmdType ##arg1Threshold1 ##arg2Threshold2, vkCmdBuff, ##__VA_ARGS__);		\
+-	} else if (value1 <= arg1Threshold2 && value2 <= arg2Threshold2) {							\
+-		MVKAddCmd(baseCmdType ##arg1Threshold2 ##arg2Threshold2, vkCmdBuff, ##__VA_ARGS__);		\
+-	} else if (value1 > arg1Threshold2 && value2 <= arg2Threshold2) {							\
+-		MVKAddCmd(baseCmdType ##Multi ##arg2Threshold2, vkCmdBuff, ##__VA_ARGS__);				\
+-	} else if (value1 <= arg1Threshold1 && value2 <= arg2Threshold3) {							\
+-		MVKAddCmd(baseCmdType ##arg1Threshold1 ##arg2Threshold3, vkCmdBuff, ##__VA_ARGS__);		\
+-	} else if (value1 <= arg1Threshold2 && value2 <= arg2Threshold3) {							\
+-		MVKAddCmd(baseCmdType ##arg1Threshold2 ##arg2Threshold3, vkCmdBuff, ##__VA_ARGS__);		\
+-	} else if (value1 > arg1Threshold2 && value2 <= arg2Threshold3) {							\
+-		MVKAddCmd(baseCmdType ##Multi ##arg2Threshold3, vkCmdBuff, ##__VA_ARGS__);				\
+-	} else if (value1 <= arg1Threshold1 && value2 > arg2Threshold3) {							\
+-		MVKAddCmd(baseCmdType ##arg1Threshold1 ##Multi, vkCmdBuff, ##__VA_ARGS__);				\
+-	} else if (value1 <= arg1Threshold2 && value2 > arg2Threshold3) {							\
+-		MVKAddCmd(baseCmdType ##arg1Threshold2 ##Multi, vkCmdBuff, ##__VA_ARGS__);				\
+-	} else {																					\
+-		MVKAddCmd(baseCmdType ##Multi ##Multi, vkCmdBuff, ##__VA_ARGS__);						\
+-	}
++#define MVKAddCmd(cmdType, vkCmdBuff, ...)                                                      \
++    MVKCommandBuffer* cmdBuff = MVKCommandBuffer::getMVKCommandBuffer(vkCmdBuff);                \
++    MVKCmd ##cmdType* cmd = new (cmdBuff->pushCommandMemory(sizeof(MVKCmd ##cmdType))) MVKCmd ##cmdType;    \
++    VkResult cmdRslt = cmd->setContent(cmdBuff, ##__VA_ARGS__);                                    \
++    if (cmdRslt == VK_SUCCESS) {                                                                \
++        cmdBuff->addCommand(cmd);                                                                \
++    } else {                                                                                    \
++        cmdBuff->setConfigurationResult(cmdRslt);                                                \
++    }
+ 
+ // Define an extension call as an alias of a core call
+ #define MVK_PUBLIC_VULKAN_CORE_ALIAS(vkf, ext)	MVK_PUBLIC_VULKAN_ALIAS(vkf##ext, vkf)
+@@ -1452,7 +1391,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdSetViewport(
+ 	const VkViewport*                           pViewports) {
+ 
+ 	MVKTraceVulkanCallStart();
+-	MVKAddCmdFromThreshold(SetViewport, viewportCount, 1, commandBuffer, firstViewport, viewportCount, pViewports);
++	MVKAddCmd(SetViewport, commandBuffer, firstViewport, viewportCount, pViewports);
+ 	MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -1463,7 +1402,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdSetScissor(
+ 	const VkRect2D*                             pScissors) {
+ 
+ 	MVKTraceVulkanCallStart();
+-	MVKAddCmdFromThreshold(SetScissor, scissorCount, 1, commandBuffer, firstScissor, scissorCount, pScissors);
++	MVKAddCmd(SetScissor, commandBuffer, firstScissor, scissorCount, pScissors);
+ 	MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -1550,10 +1489,10 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdBindDescriptorSets(
+ 	
+ 	MVKTraceVulkanCallStart();
+ 	if (dynamicOffsetCount) {
+-		MVKAddCmdFromThreshold(BindDescriptorSetsDynamic, setCount, 4, commandBuffer, pipelineBindPoint, layout,
++		MVKAddCmd(BindDescriptorSetsDynamic, commandBuffer, pipelineBindPoint, layout,
+ 				  firstSet, setCount, pDescriptorSets, dynamicOffsetCount, pDynamicOffsets);
+ 	} else {
+-		MVKAddCmdFrom2Thresholds(BindDescriptorSetsStatic, setCount, 1, 4, commandBuffer, pipelineBindPoint, layout,
++		MVKAddCmd(BindDescriptorSetsStatic, commandBuffer, pipelineBindPoint, layout,
+ 				  firstSet, setCount, pDescriptorSets);
+ 	}
+ 	MVKTraceVulkanCallEnd();
+@@ -1578,8 +1517,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdBindVertexBuffers(
+     const VkDeviceSize*                         pOffsets) {
+ 	
+ 	MVKTraceVulkanCallStart();
+-	MVKAddCmdFrom2Thresholds(BindVertexBuffers, bindingCount, 1, 2, commandBuffer, 
+-							 firstBinding, bindingCount, pBuffers, pOffsets, nullptr, nullptr);
++	MVKAddCmd(BindVertexBuffers, commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets, nullptr, nullptr);
+ 	MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -1661,7 +1599,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdCopyBuffer(
+     const VkBufferCopy*                         pRegions) {
+ 	
+ 	MVKTraceVulkanCallStart();
+-	MVKAddCmdFromThreshold(CopyBuffer, regionCount, 1, commandBuffer, srcBuffer, destBuffer, regionCount, pRegions);
++	MVKAddCmd(CopyBuffer, commandBuffer, srcBuffer, destBuffer, regionCount, pRegions);
+ 	MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -1675,7 +1613,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdCopyImage(
+     const VkImageCopy*                          pRegions) {
+ 
+ 	MVKTraceVulkanCallStart();
+-	MVKAddCmdFromThreshold(CopyImage, regionCount, 1, commandBuffer,
++	MVKAddCmd(CopyImage, commandBuffer,
+ 						   srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions);
+ 	MVKTraceVulkanCallEnd();
+ }
+@@ -1691,7 +1629,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdBlitImage(
+     VkFilter                                    filter) {
+ 	
+ 	MVKTraceVulkanCallStart();
+-	MVKAddCmdFromThreshold(BlitImage, regionCount, 1, commandBuffer,
++	MVKAddCmd(BlitImage, commandBuffer,
+ 						   srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions, filter);
+ 	MVKTraceVulkanCallEnd();
+ }
+@@ -1705,7 +1643,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdCopyBufferToImage(
+     const VkBufferImageCopy*                    pRegions) {
+ 	
+ 	MVKTraceVulkanCallStart();
+-    MVKAddCmdFrom3Thresholds(BufferImageCopy, regionCount, 1, 4, 8, commandBuffer,
++    MVKAddCmd(BufferImageCopy, commandBuffer,
+ 							 srcBuffer, dstImage, dstImageLayout, regionCount, pRegions, true);
+ 	MVKTraceVulkanCallEnd();
+ }
+@@ -1719,7 +1657,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdCopyImageToBuffer(
+     const VkBufferImageCopy*                    pRegions) {
+ 	
+ 	MVKTraceVulkanCallStart();
+-	MVKAddCmdFrom3Thresholds(BufferImageCopy, regionCount, 1, 4, 8, commandBuffer,
++	MVKAddCmd(BufferImageCopy, commandBuffer,
+ 							 dstBuffer, srcImage, srcImageLayout, regionCount, pRegions, false);
+ 	MVKTraceVulkanCallEnd();
+ }
+@@ -1759,7 +1697,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdClearColorImage(
+ 	MVKTraceVulkanCallStart();
+ 	VkClearValue clrVal;
+ 	clrVal.color = *pColor;
+-	MVKAddCmdFromThreshold(ClearColorImage, rangeCount, 1, commandBuffer,
++	MVKAddCmd(ClearColorImage, commandBuffer,
+ 						   image, imageLayout, clrVal, rangeCount, pRanges);
+ 	MVKTraceVulkanCallEnd();
+ }
+@@ -1775,7 +1713,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdClearDepthStencilImage(
+ 	MVKTraceVulkanCallStart();
+ 	VkClearValue clrVal;
+ 	clrVal.depthStencil = *pDepthStencil;
+-    MVKAddCmdFromThreshold(ClearDepthStencilImage, rangeCount, 1, commandBuffer,
++    MVKAddCmd(ClearDepthStencilImage, commandBuffer,
+ 						   image, imageLayout, clrVal, rangeCount, pRanges);
+ 	MVKTraceVulkanCallEnd();
+ }
+@@ -1789,10 +1727,10 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdClearAttachments(
+ 
+ 	MVKTraceVulkanCallStart();
+ 	if (attachmentCount > 1) {
+-		MVKAddCmdFromThreshold(ClearMultiAttachments, rectCount, 1, commandBuffer,
++		MVKAddCmd(ClearMultiAttachments, commandBuffer,
+ 							   attachmentCount, pAttachments, rectCount, pRects);
+ 	} else {
+-		MVKAddCmdFromThreshold(ClearSingleAttachment, rectCount, 1, commandBuffer,
++		MVKAddCmd(ClearSingleAttachment, commandBuffer,
+ 							   attachmentCount, pAttachments, rectCount, pRects);
+ 	}
+ 	MVKTraceVulkanCallEnd();
+@@ -1808,7 +1746,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdResolveImage(
+     const VkImageResolve*                       pRegions) {
+ 	
+ 	MVKTraceVulkanCallStart();
+-	MVKAddCmdFromThreshold(ResolveImage, regionCount, 1, commandBuffer,
++	MVKAddCmd(ResolveImage, commandBuffer,
+ 						   srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions);
+ 	MVKTraceVulkanCallEnd();
+ }
+@@ -1847,7 +1785,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdWaitEvents(
+ 	const VkImageMemoryBarrier*                 pImageMemoryBarriers) {
+ 
+ 	MVKTraceVulkanCallStart();
+-	MVKAddCmdFromThreshold(WaitEvents, eventCount, 1, commandBuffer,
++	MVKAddCmd(WaitEvents, commandBuffer,
+ 						   eventCount, pEvents, srcStageMask, dstStageMask,
+ 						   memoryBarrierCount, pMemoryBarriers,
+ 						   bufferMemoryBarrierCount, pBufferMemoryBarriers,
+@@ -1868,8 +1806,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdPipelineBarrier(
+ 	const VkImageMemoryBarrier*                 pImageMemoryBarriers) {
+ 
+ 	MVKTraceVulkanCallStart();
+-	uint32_t barrierCount = memoryBarrierCount + bufferMemoryBarrierCount + imageMemoryBarrierCount;
+-	MVKAddCmdFrom2Thresholds(PipelineBarrier, barrierCount, 1, 4, commandBuffer,
++	MVKAddCmd(PipelineBarrier, commandBuffer,
+ 							   srcStageMask, dstStageMask, dependencyFlags,
+ 							   memoryBarrierCount, pMemoryBarriers,
+ 							   bufferMemoryBarrierCount, pBufferMemoryBarriers,
+@@ -1945,7 +1882,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdPushConstants(
+     const void*                                 pValues) {
+ 	
+ 	MVKTraceVulkanCallStart();
+-	MVKAddCmdFrom2Thresholds(PushConstants, size, 64, 128, commandBuffer, layout, stageFlags, offset, size, pValues);
++	MVKAddCmd(PushConstants, commandBuffer, layout, stageFlags, offset, size, pValues);
+ 	MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -1970,10 +1907,8 @@ static void mvkCmdBeginRenderPass(
+ 						? MVKArrayRef<MVKImageView*>((MVKImageView**)pAttachmentBegin->pAttachments,
+ 													 pAttachmentBegin->attachmentCount)
+ 						: ((MVKFramebuffer*)pRenderPassBegin->framebuffer)->getAttachments());
+-	
+-	MVKAddCmdFrom5Thresholds(BeginRenderPass,
+-							 pRenderPassBegin->clearValueCount, 1, 2,
+-							 attachments.size(), 0, 1, 2,
++
++	MVKAddCmd(BeginRenderPass,
+ 							 commandBuffer,
+ 							 pRenderPassBegin,
+ 							 pSubpassBeginInfo,
+@@ -2019,7 +1954,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdExecuteCommands(
+     const VkCommandBuffer*						pCommandBuffers) {
+ 	
+ 	MVKTraceVulkanCallStart();
+-	MVKAddCmdFromThreshold(ExecuteCommands, cmdBuffersCount, 1, commandBuffer, cmdBuffersCount, pCommandBuffers);
++	MVKAddCmd(ExecuteCommands, commandBuffer, cmdBuffersCount, pCommandBuffers);
+ 	MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -2532,8 +2467,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdBeginRendering(
+     const VkRenderingInfo*                      pRenderingInfo) {
+ 
+     MVKTraceVulkanCallStart();
+-    MVKAddCmdFrom3Thresholds(BeginRendering, pRenderingInfo->colorAttachmentCount,
+-                             1, 2, 4, commandBuffer, pRenderingInfo);
++    MVKAddCmd(BeginRendering, commandBuffer, pRenderingInfo);
+     MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -2547,8 +2481,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdBindVertexBuffers2(
+     const VkDeviceSize*                         pStrides) {
+ 
+     MVKTraceVulkanCallStart();
+-	MVKAddCmdFrom2Thresholds(BindVertexBuffers, bindingCount, 1, 2, commandBuffer,
+-							 firstBinding, bindingCount, pBuffers, pOffsets, pSizes, pStrides);
++	MVKAddCmd(BindVertexBuffers, commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets, pSizes, pStrides);
+     MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -2557,8 +2490,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdBlitImage2(
+     const VkBlitImageInfo2*                     pBlitImageInfo) {
+ 
+ 	MVKTraceVulkanCallStart();
+-    MVKAddCmdFromThreshold(BlitImage, pBlitImageInfo->regionCount, 1, commandBuffer,
+-                           pBlitImageInfo);
++    MVKAddCmd(BlitImage, commandBuffer, pBlitImageInfo);
+     MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -2567,7 +2499,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdCopyBuffer2(
+     const VkCopyBufferInfo2* pCopyBufferInfo) {
+     
+ 	MVKTraceVulkanCallStart();
+-    MVKAddCmdFromThreshold(CopyBuffer, pCopyBufferInfo->regionCount, 1, commandBuffer, pCopyBufferInfo);
++    MVKAddCmd(CopyBuffer, commandBuffer, pCopyBufferInfo);
+     MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -2576,8 +2508,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdCopyBufferToImage2(
+     const VkCopyBufferToImageInfo2*             pCopyBufferToImageInfo) {
+ 
+ 	MVKTraceVulkanCallStart();
+-    MVKAddCmdFrom3Thresholds(BufferImageCopy, pCopyBufferToImageInfo->regionCount, 1, 4, 8, commandBuffer,
+-                             pCopyBufferToImageInfo);
++    MVKAddCmd(BufferImageCopy, commandBuffer, pCopyBufferToImageInfo);
+     MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -2586,8 +2517,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdCopyImage2(
+     const VkCopyImageInfo2*                     pCopyImageInfo) {
+ 
+ 	MVKTraceVulkanCallStart();
+-    MVKAddCmdFromThreshold(CopyImage, pCopyImageInfo->regionCount, 1, commandBuffer,
+-                           pCopyImageInfo);
++    MVKAddCmd(CopyImage, commandBuffer, pCopyImageInfo);
+     MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -2596,8 +2526,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdCopyImageToBuffer2(
+     const VkCopyImageToBufferInfo2*             pCopyImageInfo) {
+ 
+ 	MVKTraceVulkanCallStart();
+-    MVKAddCmdFrom3Thresholds(BufferImageCopy, pCopyImageInfo->regionCount, 1, 4, 8, commandBuffer,
+-                             pCopyImageInfo);
++    MVKAddCmd(BufferImageCopy, commandBuffer, pCopyImageInfo);
+     MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -2614,8 +2543,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdPipelineBarrier2(
+     const VkDependencyInfo*                     pDependencyInfo) {
+ 
+ 	MVKTraceVulkanCallStart();
+-	uint32_t barrierCount = pDependencyInfo->memoryBarrierCount + pDependencyInfo->bufferMemoryBarrierCount + pDependencyInfo->imageMemoryBarrierCount;
+-	MVKAddCmdFrom2Thresholds(PipelineBarrier, barrierCount, 1, 4, commandBuffer, pDependencyInfo);
++	MVKAddCmd(PipelineBarrier, commandBuffer, pDependencyInfo);
+ 	MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -2634,8 +2562,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdResolveImage2(
+     const VkResolveImageInfo2* pResolveImageInfo) {
+ 
+ 	MVKTraceVulkanCallStart();
+-    MVKAddCmdFromThreshold(ResolveImage, pResolveImageInfo->regionCount, 1, commandBuffer,
+-                           pResolveImageInfo);
++    MVKAddCmd(ResolveImage, commandBuffer, pResolveImageInfo);
+     MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -2745,7 +2672,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdSetScissorWithCount(
+     const VkRect2D*                             pScissors) {
+     
+     MVKTraceVulkanCallStart();
+-    MVKAddCmdFromThreshold(SetScissor, scissorCount, 1, commandBuffer, 0, scissorCount, pScissors);
++    MVKAddCmd(SetScissor, commandBuffer, 0, scissorCount, pScissors);
+     MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -2777,7 +2704,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdSetViewportWithCount(
+     const VkViewport*                           pViewports) {
+     
+     MVKTraceVulkanCallStart();
+-    MVKAddCmdFromThreshold(SetViewport, viewportCount, 1, commandBuffer, 0, viewportCount, pViewports);
++    MVKAddCmd(SetViewport, commandBuffer, 0, viewportCount, pViewports);
+     MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -2788,7 +2715,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdWaitEvents2(
+     const VkDependencyInfo*                     pDependencyInfos) {
+ 
+ 	MVKTraceVulkanCallStart();
+-	MVKAddCmdFromThreshold(WaitEvents, eventCount, 1, commandBuffer, eventCount, pEvents, pDependencyInfos);
++	MVKAddCmd(WaitEvents, commandBuffer, eventCount, pEvents, pDependencyInfos);
+ 	MVKTraceVulkanCallEnd();
+ }
+ 
+@@ -2976,24 +2903,24 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdBindDescriptorSets2(
+ 	// as if the equivalent original version of this command had been called with the same parameters.
+ 	if (pBindDescriptorSetsInfo->stageFlags & VK_SHADER_STAGE_ALL_GRAPHICS) {
+ 		if (pBindDescriptorSetsInfo->dynamicOffsetCount) {
+-			MVKAddCmdFromThreshold(BindDescriptorSetsDynamic, pBindDescriptorSetsInfo->descriptorSetCount, 4, commandBuffer,
++			MVKAddCmd(BindDescriptorSetsDynamic, commandBuffer,
+ 					VK_PIPELINE_BIND_POINT_GRAPHICS, pBindDescriptorSetsInfo->layout, pBindDescriptorSetsInfo->firstSet,
+ 					pBindDescriptorSetsInfo->descriptorSetCount, pBindDescriptorSetsInfo->pDescriptorSets, pBindDescriptorSetsInfo->dynamicOffsetCount,
+ 					pBindDescriptorSetsInfo->pDynamicOffsets);
+ 		} else {
+-			MVKAddCmdFrom2Thresholds(BindDescriptorSetsStatic, pBindDescriptorSetsInfo->descriptorSetCount, 1, 4, commandBuffer,
++			MVKAddCmd(BindDescriptorSetsStatic, commandBuffer,
+ 					VK_PIPELINE_BIND_POINT_GRAPHICS, pBindDescriptorSetsInfo->layout, pBindDescriptorSetsInfo->firstSet,
+ 					pBindDescriptorSetsInfo->descriptorSetCount, pBindDescriptorSetsInfo->pDescriptorSets);
+ 		}
+ 	}
+ 	if (pBindDescriptorSetsInfo->stageFlags & VK_SHADER_STAGE_COMPUTE_BIT) {
+ 		if (pBindDescriptorSetsInfo->dynamicOffsetCount) {
+-			MVKAddCmdFromThreshold(BindDescriptorSetsDynamic, pBindDescriptorSetsInfo->descriptorSetCount, 4, commandBuffer,
++			MVKAddCmd(BindDescriptorSetsDynamic, commandBuffer,
+ 					VK_PIPELINE_BIND_POINT_COMPUTE, pBindDescriptorSetsInfo->layout, pBindDescriptorSetsInfo->firstSet,
+ 					pBindDescriptorSetsInfo->descriptorSetCount, pBindDescriptorSetsInfo->pDescriptorSets, pBindDescriptorSetsInfo->dynamicOffsetCount,
+ 					pBindDescriptorSetsInfo->pDynamicOffsets);
+ 		} else {
+-			MVKAddCmdFrom2Thresholds(BindDescriptorSetsStatic, pBindDescriptorSetsInfo->descriptorSetCount, 1, 4, commandBuffer,
++			MVKAddCmd(BindDescriptorSetsStatic, commandBuffer,
+ 					VK_PIPELINE_BIND_POINT_COMPUTE, pBindDescriptorSetsInfo->layout, pBindDescriptorSetsInfo->firstSet,
+ 					pBindDescriptorSetsInfo->descriptorSetCount, pBindDescriptorSetsInfo->pDescriptorSets);
+ 		}
+@@ -3006,7 +2933,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdPushConstants2(
+     const VkPushConstantsInfo*                  pPushConstantsInfo) {
+ 
+ 	MVKTraceVulkanCallStart();
+-	MVKAddCmdFrom2Thresholds(PushConstants, pPushConstantsInfo->size, 64, 128, commandBuffer, pPushConstantsInfo->layout,
++	MVKAddCmd(PushConstants, commandBuffer, pPushConstantsInfo->layout,
+ 				  pPushConstantsInfo->stageFlags, pPushConstantsInfo->offset, pPushConstantsInfo->size, pPushConstantsInfo->pValues);
+ 	MVKTraceVulkanCallEnd();
+ }
+-- 
+2.50.1 (Apple Git-155)
+
