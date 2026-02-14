@@ -1,0 +1,33 @@
+From 2c984f815fc138127018daff714d749cdf5b52a1 Mon Sep 17 00:00:00 2001
+From: V380-Ori <infiniteloop0finsanity@gmail.com>
+Date: Sat, 14 Feb 2026 07:13:49 +0200
+Subject: [PATCH] Do not retain VkImage.
+
+---
+ MoltenVK/MoltenVK/GPUObjects/MVKImage.mm | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/MoltenVK/MoltenVK/GPUObjects/MVKImage.mm b/MoltenVK/MoltenVK/GPUObjects/MVKImage.mm
+index 36c5b16d..e0a41d14 100644
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKImage.mm
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKImage.mm
+@@ -2169,8 +2169,6 @@ static void signalAndUntrack(const MVKSwapchainSignaler& signaler) {
+ 
+ MVKImageView::MVKImageView(MVKDevice* device, const VkImageViewCreateInfo* pCreateInfo) : MVKVulkanAPIDeviceObject(device) {
+ 	_image = (MVKImage*)pCreateInfo->image;
+-	_image->retain();		// Ensure image sticks around while this image view is in flight.
+-
+     _mtlTextureType = mvkMTLTextureTypeFromVkImageViewType(pCreateInfo->viewType,
+ 														   _image->getSampleCount() != VK_SAMPLE_COUNT_1_BIT &&
+ 														   (pCreateInfo->viewType != VK_IMAGE_VIEW_TYPE_2D_ARRAY ||
+@@ -2271,7 +2269,6 @@ static void signalAndUntrack(const MVKSwapchainSignaler& signaler) {
+ // Memory detached in destructor too, as a fail-safe.
+ MVKImageView::~MVKImageView() {
+ 	detachMemory();
+-	_image->release();
+ }
+ 
+ // Overridden to detach from the resource memory when the app destroys this object.
+-- 
+2.50.1 (Apple Git-155)
+

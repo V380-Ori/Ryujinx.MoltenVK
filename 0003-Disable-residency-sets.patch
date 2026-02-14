@@ -3,7 +3,6 @@ From: V380-Ori <infiniteloop0finsanity@gmail.com>
 Date: Fri, 19 Dec 2025 17:37:09 +0200
 Subject: [PATCH] Disable residency sets.
 
-Fixes flickering in ToTK.
 ---
  MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)

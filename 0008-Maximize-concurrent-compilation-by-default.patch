@@ -1,0 +1,29 @@
+From d79022f07b2b6f01a8b56fc3611be5a2ccbc0ced Mon Sep 17 00:00:00 2001
+From: V380-Ori <infiniteloop0finsanity@gmail.com>
+Date: Sun, 15 Feb 2026 01:27:46 +0200
+Subject: [PATCH] Maximize concurrent compilation by default.
+
+---
+ MoltenVK/MoltenVK/Utility/MVKEnvironment.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/MoltenVK/MoltenVK/Utility/MVKEnvironment.h b/MoltenVK/MoltenVK/Utility/MVKEnvironment.h
+index 583ecc66..868c292b 100644
+--- a/MoltenVK/MoltenVK/Utility/MVKEnvironment.h
++++ b/MoltenVK/MoltenVK/Utility/MVKEnvironment.h
+@@ -306,10 +306,10 @@ void mvkSetConfig(MVKConfiguration& dstMVKConfig, const MVKConfiguration& srcMVK
+ 
+ /**
+  * Maximize the concurrent executing compilation tasks.
+- * This functionality requires macOS 13.3. Disabled by default.
++ * This functionality requires macOS 13.3. Enabled by default.
+  */
+ #ifndef MVK_CONFIG_SHOULD_MAXIMIZE_CONCURRENT_COMPILATION
+-#  	define MVK_CONFIG_SHOULD_MAXIMIZE_CONCURRENT_COMPILATION    0
++#  	define MVK_CONFIG_SHOULD_MAXIMIZE_CONCURRENT_COMPILATION    1
+ #endif
+ 
+ /**
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,24 @@
+From acd09fc16903e9b6dc3adf38d18d9d2fb5023b56 Mon Sep 17 00:00:00 2001
+From: V380-Ori <infiniteloop0finsanity@gmail.com>
+Date: Sat, 14 Feb 2026 07:20:25 +0200
+Subject: [PATCH] Do not end current encoder before encodeWait.
+
+---
+ MoltenVK/MoltenVK/Commands/MVKCmdPipeline.mm | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCmdPipeline.mm b/MoltenVK/MoltenVK/Commands/MVKCmdPipeline.mm
+index 3424243f..07231625 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCmdPipeline.mm
++++ b/MoltenVK/MoltenVK/Commands/MVKCmdPipeline.mm
+@@ -588,7 +588,6 @@ static uint64_t mvkPipelineStageFlagsToBarrierStages(VkPipelineStageFlags2 flags
+ }
+ 
+ void MVKCmdWaitEvents::encode(MVKCommandEncoder* cmdEncoder) {
+-	cmdEncoder->endCurrentMetalEncoding();
+ 	for (MVKEvent* mvkEvt : _mvkEvents) {
+ 		mvkEvt->encodeWait(cmdEncoder->_mtlCmdBuffer);
+ 	}
+-- 
+2.50.1 (Apple Git-155)
+

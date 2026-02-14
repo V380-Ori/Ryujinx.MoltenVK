@@ -1,0 +1,47 @@
+From 89c0de9ae12c87875a9365a695d333a9a70e959c Mon Sep 17 00:00:00 2001
+From: Mario Kleiner <mario.kleiner.de@gmail.com>
+Date: Sun, 7 Dec 2025 01:54:34 +0000
+Subject: [PATCH] Fix semantics of VK_KHR_present_wait.
+
+The VK_KHR_present_wait spec states that the wait of vkWaitForPresent() should end
+as close as possible to the point in time when the presented image for a presentID
+becomes visible to the user ("first pixel visible").
+
+This can be achived by calling _swapchain->notifyPresentComplete() from
+MVKPresentableSwapchainImage::endPresentation(), ie from the Metal drawables
+presentCompleted handler, after Metal signals present completion.
+
+Right now, _swapchain->notifyPresentComplete() is called from the Metal command
+buffers completedHandler(), ie. when the command buffer scheduling the present
+completes. This typically happens multiple milliseconds before actual present, and
+in case of presents scheduled via VK_GOOGLE_DISPLAY_TIMING far in the future,
+there can be a long time between completedHandler() and actual present completion.
+
+This commit moves the _swapchain->notifyPresentComplete() to the more appropriate
+place, and behind _swapchain->endPresentation(), so if a client returns from a
+call to vkWaitForPresent(), potentially queried VK_GOOGLE_DISPLAY_TIMING
+presentation timestamps are already available for the client to fetch.
+---
+ MoltenVK/MoltenVK/GPUObjects/MVKImage.mm | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/MoltenVK/MoltenVK/GPUObjects/MVKImage.mm b/MoltenVK/MoltenVK/GPUObjects/MVKImage.mm
+index 5463d5a8c..e6e1cb751 100644
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKImage.mm
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKImage.mm
+@@ -1650,7 +1650,6 @@ static void signalAndUntrack(const MVKSwapchainSignaler& signaler) {
+ 		if (fence) { fence->release(); }
+ 		[mtlDrwbl release];
+ 		release();
+-		if (_swapchain) { _swapchain->notifyPresentComplete(presentInfo); }
+ 	}];
+ 
+ 	signal(signaler.semaphore, signaler.semaphoreSignalToken, mtlCmdBuff);
+@@ -1721,6 +1720,7 @@ static void signalAndUntrack(const MVKSwapchainSignaler& signaler) {
+ 		lock_guard<mutex> lock(_detachmentLock);
+ 		if (_device) { addPerformanceInterval(getPerformanceStats().queue.presentSwapchains, _presentationStartTime); }
+ 		if (_swapchain) { _swapchain->endPresentation(presentInfo, _beginPresentTime, actualPresentTime); }
++		if (_swapchain) { _swapchain->notifyPresentComplete(presentInfo); }
+ 	}
+ 
+ 	// Makes an image available for acquisition by the app.
