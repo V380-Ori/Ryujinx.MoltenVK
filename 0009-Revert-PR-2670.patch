@@ -1,0 +1,204 @@
+From 8117f1c7e4ba658dbf1c10fa126dfe8bc7d1a885 Mon Sep 17 00:00:00 2001
+From: V380-Ori <infiniteloop0finsanity@gmail.com>
+Date: Fri, 24 Apr 2026 19:27:45 +0300
+Subject: [PATCH] Revert "Introduce KHR_external_semaphore_fd only for FD==-1"
+
+This reverts commit 2f1358e29197de8f03193112df15ba48c89a318e.
+---
+ MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm   |  8 +---
+ MoltenVK/MoltenVK/GPUObjects/MVKInstance.mm |  2 -
+ MoltenVK/MoltenVK/GPUObjects/MVKSync.h      | 12 +-----
+ MoltenVK/MoltenVK/GPUObjects/MVKSync.mm     | 48 +--------------------
+ MoltenVK/MoltenVK/Layers/MVKExtensions.def  |  1 -
+ MoltenVK/MoltenVK/Vulkan/vulkan.mm          | 24 -----------
+ 6 files changed, 4 insertions(+), 91 deletions(-)
+
+diff --git a/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm b/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
+index 31e9c4ae..e1f3c04e 100644
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
+@@ -1839,16 +1839,12 @@
+ 	pExternalFenceProperties->pNext = next;
+ }
+ 
+-static const VkExternalSemaphoreProperties _extSemProps = {
+-	VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES,
+-	nullptr, 0, 0,
+-	VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT | VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT
+-};
++static const VkExternalSemaphoreProperties _emptyExtSemProps = {VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES, nullptr, 0, 0, 0};
+ 
+ void MVKPhysicalDevice::getExternalSemaphoreProperties(const VkPhysicalDeviceExternalSemaphoreInfo* pExternalSemaphoreInfo,
+ 													   VkExternalSemaphoreProperties* pExternalSemaphoreProperties) {
+ 	void* next = pExternalSemaphoreProperties->pNext;
+-	*pExternalSemaphoreProperties = _extSemProps;
++	*pExternalSemaphoreProperties = _emptyExtSemProps;
+ 	pExternalSemaphoreProperties->pNext = next;
+ }
+ 
+diff --git a/MoltenVK/MoltenVK/GPUObjects/MVKInstance.mm b/MoltenVK/MoltenVK/GPUObjects/MVKInstance.mm
+index bd5a6ad1..797c344d 100644
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKInstance.mm
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKInstance.mm
+@@ -817,8 +817,6 @@
+ 	ADD_DVC_EXT_ENTRY_POINT(vkCmdSetTessellationDomainOriginEXT, EXT_EXTENDED_DYNAMIC_STATE_3);
+ 	ADD_DVC_EXT_ENTRY_POINT(vkGetMemoryMetalHandleEXT, EXT_EXTERNAL_MEMORY_METAL);
+ 	ADD_DVC_EXT_ENTRY_POINT(vkGetMemoryMetalHandlePropertiesEXT, EXT_EXTERNAL_MEMORY_METAL);
+-	ADD_DVC_EXT_ENTRY_POINT(vkImportSemaphoreFdKHR, KHR_EXTERNAL_SEMAPHORE_FD);
+-	ADD_DVC_EXT_ENTRY_POINT(vkGetSemaphoreFdKHR, KHR_EXTERNAL_SEMAPHORE_FD);
+ }
+ 
+ void MVKInstance::logVersions() {
+diff --git a/MoltenVK/MoltenVK/GPUObjects/MVKSync.h b/MoltenVK/MoltenVK/GPUObjects/MVKSync.h
+index 8b3d02df..76678237 100644
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKSync.h
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKSync.h
+@@ -191,15 +191,6 @@ public:
+ 	 */
+ 	virtual id<MTLSharedEvent> getMTLSharedEvent() { return nil; };
+ 
+-	/**
+-	 * Import a semaphore from a file descriptor
+-	 */
+-	virtual VkResult importFd(VkSemaphoreImportFlags flags, VkExternalSemaphoreHandleTypeFlagBits handleType, int fd) { return VK_ERROR_FEATURE_NOT_PRESENT; };
+-
+-	/**
+-	 * Export a semaphore to a file descriptor
+-	 */
+-	virtual VkResult exportFd(VkExternalSemaphoreHandleTypeFlagBits handleType, int *pFd) { return VK_ERROR_FEATURE_NOT_PRESENT; };
+ 
+ #pragma mark Construction
+ 
+@@ -250,8 +241,6 @@ public:
+ 	uint64_t deferSignal() override;
+ 	void encodeDeferredSignal(id<MTLCommandBuffer> mtlCmdBuff, uint64_t deferToken) override;
+ 	bool isUsingCommandEncoding() override { return true; }
+-	VkResult importFd(VkSemaphoreImportFlags flags, VkExternalSemaphoreHandleTypeFlagBits handleType, int fd) override;
+-	VkResult exportFd(VkExternalSemaphoreHandleTypeFlagBits handleType, int *pFd) override;
+ 
+ 	MVKSemaphoreMTLEvent(MVKDevice* device,
+ 						 const VkSemaphoreCreateInfo* pCreateInfo,
+@@ -396,6 +385,7 @@ public:
+ 	/** Returns whether this fence has been signaled and not reset. */
+ 	bool getIsSignaled();
+ 
++	
+ #pragma mark Construction
+ 
+     MVKFence(MVKDevice* device, const VkFenceCreateInfo* pCreateInfo) :
+diff --git a/MoltenVK/MoltenVK/GPUObjects/MVKSync.mm b/MoltenVK/MoltenVK/GPUObjects/MVKSync.mm
+index 1597f940..fa183bf3 100644
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKSync.mm
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKSync.mm
+@@ -131,48 +131,6 @@
+ 	[mtlCmdBuff encodeSignalEvent: _mtlEvent value: deferToken];
+ }
+ 
+-VkResult MVKSemaphoreMTLEvent::importFd(VkSemaphoreImportFlags flags, VkExternalSemaphoreHandleTypeFlagBits handleType, int fd) {
+-	if (handleType != VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT || fd != -1) {
+-		return reportError(VK_ERROR_INVALID_EXTERNAL_HANDLE, "importFd(): Only VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT with fd == -1 is supported.");
+-	}
+-	/**
+-	* If handleType is `VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT`, the special
+-	* value -1 for fd is treated like a valid sync file descriptor referring to an object that has already
+-	* signaled. The import operation will succeed and the VkFence will have a temporarily
+-	* imported payload as if a valid file descriptor had been provided.
+-	*/
+-	/**
+-	* If handleType is `VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT`, the special
+-	* value -1 for fd is treated like a valid sync file descriptor referring to an object that has already
+-	* signaled. The import operation will succeed and the VkSemaphore will have a temporarily
+-	* imported payload as if a valid file descriptor had been provided.
+-	*/
+-	uint64_t value = _mtlEventValue.load();
+-	[(id<MTLSharedEvent>)_mtlEvent setSignaledValue:value];
+-	return VK_SUCCESS;
+-}
+-
+-VkResult MVKSemaphoreMTLEvent::exportFd(VkExternalSemaphoreHandleTypeFlagBits handleType, int *pFd) {
+-	if (handleType != VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT) {
+-		return reportError(VK_ERROR_INVALID_EXTERNAL_HANDLE, "exportFd(): Only VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT is supported.");
+-	}
+-	/**
+-	* `VUID-VkSemaphoreGetFdInfoKHR-handleType-03254`
+-	* If handleType refers to a handle type with copy payload transference semantics, semaphore
+-	* must have an associated semaphore signal operation that has been submitted for execution
+-	* and any semaphore signal operations on which it depends must have also been submitted
+-	* for execution
+-	*/
+-	/**
+-	* ... exporting a semaphore payload to a handle with copy transference has the same side
+-	* effects on the source semaphore’s payload as executing a semaphore wait operation.
+-	*/
+-	uint64_t value = _mtlEventValue.load();
+-	[(id<MTLSharedEvent>)_mtlEvent waitUntilSignaledValue:value timeoutMS:kMVKUndefinedLargeUInt64];
+-	*pFd = -1;
+-	return VK_SUCCESS;
+-}
+-
+ MVKSemaphoreMTLEvent::MVKSemaphoreMTLEvent(MVKDevice* device,
+ 										   const VkSemaphoreCreateInfo* pCreateInfo,
+ 										   const VkExportMetalObjectCreateInfoEXT* pExportInfo,
+@@ -186,11 +144,7 @@
+ 		_mtlEvent = [getMTLDevice() newSharedEvent];	//retained
+ 		_mtlEventValue = ((id<MTLSharedEvent>)_mtlEvent).signaledValue + 1;
+ 	} else {
+-		// We might use importFd()/exportFd() so we need a MTLSharedEvent
+-		// At creation, we might know about potential exports when
+-		// `VkExportSemaphoreCreateInfo` is present but we have no idea
+-		// if imports might happen.
+-		_mtlEvent = [getMTLDevice() newSharedEvent];			//retained
++		_mtlEvent = [getMTLDevice() newEvent];			//retained
+ 		_mtlEventValue = 1;
+ 	}
+ }
+diff --git a/MoltenVK/MoltenVK/Layers/MVKExtensions.def b/MoltenVK/MoltenVK/Layers/MVKExtensions.def
+index 3ae63cbe..33816e7c 100644
+--- a/MoltenVK/MoltenVK/Layers/MVKExtensions.def
++++ b/MoltenVK/MoltenVK/Layers/MVKExtensions.def
+@@ -63,7 +63,6 @@ MVK_EXTENSION(KHR_external_fence_capabilities,          KHR_EXTERNAL_FENCE_CAPAB
+ MVK_EXTENSION(KHR_external_memory,                      KHR_EXTERNAL_MEMORY,                      DEVICE,   10.11,  8.0,  1.0)
+ MVK_EXTENSION(KHR_external_memory_capabilities,         KHR_EXTERNAL_MEMORY_CAPABILITIES,         INSTANCE, 10.11,  8.0,  1.0)
+ MVK_EXTENSION(KHR_external_semaphore,                   KHR_EXTERNAL_SEMAPHORE,                   DEVICE,   10.11,  8.0,  1.0)
+-MVK_EXTENSION(KHR_external_semaphore_fd,                KHR_EXTERNAL_SEMAPHORE_FD,                DEVICE,   10.11,  8.0,  1.0)
+ MVK_EXTENSION(KHR_external_semaphore_capabilities,      KHR_EXTERNAL_SEMAPHORE_CAPABILITIES,      INSTANCE, 10.11,  8.0,  1.0)
+ MVK_EXTENSION(KHR_format_feature_flags2,                KHR_FORMAT_FEATURE_FLAGS_2,               DEVICE,   10.11,  8.0,  1.0)
+ MVK_EXTENSION(KHR_fragment_shader_barycentric,          KHR_FRAGMENT_SHADER_BARYCENTRIC,          DEVICE,   10.15, 14.0,  1.0)
+diff --git a/MoltenVK/MoltenVK/Vulkan/vulkan.mm b/MoltenVK/MoltenVK/Vulkan/vulkan.mm
+index d5188fb7..bca61197 100644
+--- a/MoltenVK/MoltenVK/Vulkan/vulkan.mm
++++ b/MoltenVK/MoltenVK/Vulkan/vulkan.mm
+@@ -3371,30 +3371,6 @@ MVK_PUBLIC_VULKAN_SYMBOL VkResult vkGetMemoryMetalHandlePropertiesEXT(
+ 
+ MVK_PUBLIC_VULKAN_CORE_ALIAS(vkGetPhysicalDeviceExternalSemaphoreProperties, KHR);
+ 
+-#pragma mark -
+-#pragma mark VK_KHR_external_semaphore_fd extension
+-
+-MVK_PUBLIC_VULKAN_SYMBOL VkResult vkImportSemaphoreFdKHR(
+-                                                         VkDevice                          device,
+-                                                         const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo) {
+-    MVKTraceVulkanCallStart();
+-    auto* mvkSem4 = (MVKSemaphore*)pImportSemaphoreFdInfo->semaphore;
+-    VkResult rslt = mvkSem4->importFd(pImportSemaphoreFdInfo->flags, pImportSemaphoreFdInfo->handleType, pImportSemaphoreFdInfo->fd);
+-    MVKTraceVulkanCallEnd();
+-    return rslt;
+-}
+-
+-MVK_PUBLIC_VULKAN_SYMBOL VkResult vkGetSemaphoreFdKHR(
+-                                                      VkDevice                       device,
+-                                                      const VkSemaphoreGetFdInfoKHR* pGetFdInfo,
+-                                                      int*                           pFd) {
+-    MVKTraceVulkanCallStart();
+-    auto* mvkSem4 = (MVKSemaphore*)pGetFdInfo->semaphore;
+-    VkResult rslt = mvkSem4->exportFd(pGetFdInfo->handleType, pFd);
+-    MVKTraceVulkanCallEnd();
+-    return rslt;
+-}
+-
+ 
+ #pragma mark -
+ #pragma mark VK_KHR_get_memory_requirements2 extension
+-- 
+2.50.1 (Apple Git-155)
+
