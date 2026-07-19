@@ -1,0 +1,28 @@
+From be38bd189112e50d5d6ae1f680386d77f8da80c1 Mon Sep 17 00:00:00 2001
+From: V380-Ori <infiniteloop0finsanity@gmail.com>
+Date: Sun, 5 Jul 2026 15:28:50 +0300
+Subject: [PATCH] Avoid direct-to-display when using asynchronous queue
+ submissions.
+
+---
+ MoltenVK/MoltenVK/GPUObjects/MVKSwapchain.mm | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/MoltenVK/MoltenVK/GPUObjects/MVKSwapchain.mm b/MoltenVK/MoltenVK/GPUObjects/MVKSwapchain.mm
+index 4c908669..e15ee952 100644
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKSwapchain.mm
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKSwapchain.mm
+@@ -517,6 +517,10 @@ static CALayerContentsGravity getCALayerContentsGravity(VkSwapchainPresentScalin
+ 		mtlLayer.opaque = pCreateInfo->compositeAlpha == VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+ 	}
+ 
++	if (!getMVKConfig().synchronousQueueSubmits) {
++		mtlLayer.opaque = false;
++	}
++
+ 	switch (pCreateInfo->imageColorSpace) {
+ 		case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
+ 			mtlLayer.colorspaceNameMVK = kCGColorSpaceSRGB;
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,16 +1,16 @@
-From 51e896738f5d041047fd2f20ca86137394e262c2 Mon Sep 17 00:00:00 2001
+From 30e309bcc3595bf97cc12ddb41f0d2e50ec390b3 Mon Sep 17 00:00:00 2001
 From: V380-Ori <infiniteloop0finsanity@gmail.com>
-Date: Mon, 11 May 2026 19:37:49 +0300
+Date: Sun, 19 Jul 2026 20:50:41 +0300
 Subject: [PATCH] Use MSL 2.4 by default on macOS.
 
 ---
  Common/MVKCommonEnvironment.h                 | 15 ++++++++++++++
  .../Commands/MVKCommandEncoderState.h         | 14 +++++++++++++
  .../Commands/MVKCommandEncoderState.mm        | 20 +++++++++++++++++++
- MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm     |  9 +++++++++
+ MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm     |  8 ++++++++
  MoltenVK/MoltenVK/GPUObjects/MVKImage.mm      |  4 ++++
  MoltenVK/MoltenVK/Layers/MVKExtensions.def    |  2 ++
- 6 files changed, 64 insertions(+)
+ 6 files changed, 63 insertions(+)
 
 diff --git a/Common/MVKCommonEnvironment.h b/Common/MVKCommonEnvironment.h
 index 886c8aee..ef754424 100644
@@ -39,7 +39,7 @@ index 886c8aee..ef754424 100644
  #ifndef MVK_XCODE_26
  #   define MVK_XCODE_26             ((__MAC_OS_X_VERSION_MAX_ALLOWED >= 260000) || \
 diff --git a/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.h b/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.h
-index dcaa60cc..27d5d28b 100644
+index 25e6017b..a39b8a7b 100644
 --- a/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.h
 +++ b/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.h
 @@ -86,10 +86,16 @@ struct MVKResourceBinder {
@@ -79,7 +79,7 @@ index dcaa60cc..27d5d28b 100644
  	enum class Stage {
  		Vertex,
 diff --git a/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.mm b/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.mm
-index 4315e320..35109bf0 100644
+index 7d16b94e..0566b1e5 100644
 --- a/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.mm
 +++ b/MoltenVK/MoltenVK/Commands/MVKCommandEncoderState.mm
 @@ -88,8 +88,10 @@ static void setSampler(id<MTLRenderCommandEncoder> encoder, id<MTLSamplerState>
@@ -143,10 +143,10 @@ index 4315e320..35109bf0 100644
  	static void setBytes(id<MTLComputeCommandEncoder> encoder, const void* bytes, NSUInteger length, NSUInteger index) {
  		[encoder setBytes:bytes length:length atIndex:index];
 diff --git a/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm b/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
-index 2e212645..118fe07a 100644
+index 97727575..c55a64e6 100644
 --- a/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
 +++ b/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
-@@ -2463,9 +2463,11 @@
+@@ -2466,9 +2466,11 @@
  	_metalFeatures.placementHeaps = allowMTLHeap && (supportsMTLGPUFamily(Apple2) || supportsMTLGPUFamily(Mac2));
  	_metalFeatures.multisampleArrayTextures = !MVK_TVOS || mvkOSVersionIsAtLeast(16.0);
  
@@ -157,15 +157,14 @@ index 2e212645..118fe07a 100644
 +#endif
  
  	_metalFeatures.renderLinearTextures = _gpuCapabilities.supportsRenderLinearTextures;
- 
-@@ -2616,6 +2618,13 @@
- 		setMSLVersion(2, 3);
+ 	_metalFeatures.nativeTextureSwizzle = false;
+@@ -2628,6 +2630,12 @@
+ 		setMSLVersion(2, 4);
  	}
  
 +#if MVK_USE_MSL_2_4
 +	if ( mvkOSVersionIsAtLeast(12.0) ) {
 +		_metalFeatures.mslVersionEnum = MTLLanguageVersion2_4;
-+		setMSLVersion(2, 4);
 +	}
 +#endif
 +
@@ -173,10 +172,10 @@ index 2e212645..118fe07a 100644
  	_metalFeatures.rasterOrderGroups = _mtlDevice.areRasterOrderGroupsSupported;
  	_metalFeatures.pullModelInterpolation = _mtlDevice.supportsPullModelInterpolation;
 diff --git a/MoltenVK/MoltenVK/GPUObjects/MVKImage.mm b/MoltenVK/MoltenVK/GPUObjects/MVKImage.mm
-index 696ec446..455f2883 100644
+index ef8ca60f..8e265d60 100644
 --- a/MoltenVK/MoltenVK/GPUObjects/MVKImage.mm
 +++ b/MoltenVK/MoltenVK/GPUObjects/MVKImage.mm
-@@ -1229,7 +1229,11 @@ static MTLRegion getMTLRegion(const ImgRgn& imgRgn) {
+@@ -1247,7 +1247,11 @@ static MTLRegion getMTLRegion(const ImgRgn& imgRgn) {
  				((_vkFormat == VK_FORMAT_R32_UINT || _vkFormat == VK_FORMAT_R32_SINT) ||
  					(_hasMutableFormat && pixFmts->getViewClass(_vkFormat) == MVKMTLViewClass::Color32 && (getIsValidViewFormat(VK_FORMAT_R32_UINT) || getIsValidViewFormat(VK_FORMAT_R32_SINT))));
  
@@ -189,7 +188,7 @@ index 696ec446..455f2883 100644
  	_isDepthStencilAttachment = (mvkAreAllFlagsEnabled(pCreateInfo->usage, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ||
  								 mvkAreAllFlagsEnabled(pixFmts->getVkFormatProperties3(pCreateInfo->format).optimalTilingFeatures, VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT));
 diff --git a/MoltenVK/MoltenVK/Layers/MVKExtensions.def b/MoltenVK/MoltenVK/Layers/MVKExtensions.def
-index b838ca0c..a5860965 100644
+index 6bc4186a..24ca9053 100644
 --- a/MoltenVK/MoltenVK/Layers/MVKExtensions.def
 +++ b/MoltenVK/MoltenVK/Layers/MVKExtensions.def
 @@ -137,9 +137,11 @@ MVK_EXTENSION(EXT_debug_report,                         EXT_DEBUG_REPORT,
@@ -205,5 +204,5 @@ index b838ca0c..a5860965 100644
  MVK_EXTENSION(EXT_external_memory_metal,                EXT_EXTERNAL_MEMORY_METAL,                DEVICE,   10.11,  8.0,  1.0)
  MVK_EXTENSION(EXT_fragment_shader_interlock,            EXT_FRAGMENT_SHADER_INTERLOCK,            DEVICE,   10.13, 11.0,  1.0)
 -- 
-2.50.1 (Apple Git-155)
+2.54.0 (Apple Git-157)
 
