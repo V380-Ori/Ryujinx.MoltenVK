@@ -1,16 +1,16 @@
-From 30e309bcc3595bf97cc12ddb41f0d2e50ec390b3 Mon Sep 17 00:00:00 2001
+From 2212d10a51d646a9b7be895f7e11a1c227a4692a Mon Sep 17 00:00:00 2001
 From: V380-Ori <infiniteloop0finsanity@gmail.com>
-Date: Sun, 19 Jul 2026 20:50:41 +0300
+Date: Tue, 28 Jul 2026 23:53:11 +0300
 Subject: [PATCH] Use MSL 2.4 by default on macOS.
 
 ---
  Common/MVKCommonEnvironment.h                 | 15 ++++++++++++++
  .../Commands/MVKCommandEncoderState.h         | 14 +++++++++++++
  .../Commands/MVKCommandEncoderState.mm        | 20 +++++++++++++++++++
- MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm     |  8 ++++++++
+ MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm     |  9 +++++++++
  MoltenVK/MoltenVK/GPUObjects/MVKImage.mm      |  4 ++++
  MoltenVK/MoltenVK/Layers/MVKExtensions.def    |  2 ++
- 6 files changed, 63 insertions(+)
+ 6 files changed, 64 insertions(+)
 
 diff --git a/Common/MVKCommonEnvironment.h b/Common/MVKCommonEnvironment.h
 index 886c8aee..ef754424 100644
@@ -143,7 +143,7 @@ index 7d16b94e..0566b1e5 100644
  	static void setBytes(id<MTLComputeCommandEncoder> encoder, const void* bytes, NSUInteger length, NSUInteger index) {
  		[encoder setBytes:bytes length:length atIndex:index];
 diff --git a/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm b/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
-index 97727575..c55a64e6 100644
+index 42e02292..99e3698c 100644
 --- a/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
 +++ b/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
 @@ -2466,9 +2466,11 @@
@@ -158,13 +158,14 @@ index 97727575..c55a64e6 100644
  
  	_metalFeatures.renderLinearTextures = _gpuCapabilities.supportsRenderLinearTextures;
  	_metalFeatures.nativeTextureSwizzle = false;
-@@ -2628,6 +2630,12 @@
+@@ -2628,6 +2630,13 @@
  		setMSLVersion(2, 4);
  	}
  
 +#if MVK_USE_MSL_2_4
 +	if ( mvkOSVersionIsAtLeast(12.0) ) {
 +		_metalFeatures.mslVersionEnum = MTLLanguageVersion2_4;
++		setMSLVersion(2, 4);
 +	}
 +#endif
 +
@@ -188,7 +189,7 @@ index ef8ca60f..8e265d60 100644
  	_isDepthStencilAttachment = (mvkAreAllFlagsEnabled(pCreateInfo->usage, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ||
  								 mvkAreAllFlagsEnabled(pixFmts->getVkFormatProperties3(pCreateInfo->format).optimalTilingFeatures, VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT));
 diff --git a/MoltenVK/MoltenVK/Layers/MVKExtensions.def b/MoltenVK/MoltenVK/Layers/MVKExtensions.def
-index 6bc4186a..24ca9053 100644
+index beb3fdd6..a68829d4 100644
 --- a/MoltenVK/MoltenVK/Layers/MVKExtensions.def
 +++ b/MoltenVK/MoltenVK/Layers/MVKExtensions.def
 @@ -137,9 +137,11 @@ MVK_EXTENSION(EXT_debug_report,                         EXT_DEBUG_REPORT,
