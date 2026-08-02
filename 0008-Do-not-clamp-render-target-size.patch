@@ -1,0 +1,37 @@
+From 8ee03172b49fc33f7f72d766c84c5aab2974929b Mon Sep 17 00:00:00 2001
+From: V380-Ori <infiniteloop0finsanity@gmail.com>
+Date: Sun, 2 Aug 2026 07:13:32 +0300
+Subject: [PATCH] Do not clamp render target size.
+
+---
+ MoltenVK/MoltenVK/Commands/MVKCommandBuffer.mm | 14 ++------------
+ 1 file changed, 2 insertions(+), 12 deletions(-)
+
+diff --git a/MoltenVK/MoltenVK/Commands/MVKCommandBuffer.mm b/MoltenVK/MoltenVK/Commands/MVKCommandBuffer.mm
+index 8c24debb..c6f88c96 100644
+--- a/MoltenVK/MoltenVK/Commands/MVKCommandBuffer.mm
++++ b/MoltenVK/MoltenVK/Commands/MVKCommandBuffer.mm
+@@ -788,18 +788,8 @@ static MVKBarrierStage commandUseToBarrierStage(MVKCommandUse use) {
+ 		mtlRPDesc.visibilityResultBuffer = _pEncodingContext->visibilityResultBuffer.buffer();
+ 	}
+ 
+-	// Metal uses MTLRenderPassDescriptor properties renderTargetWidth, renderTargetHeight,
+-	// and renderTargetArrayLength to preallocate tile memory storage on machines using tiled
+-	// rendering. This memory preallocation is not necessary if we are not rendering to
+-	// attachments, and some apps actively define extremely oversized framebuffers when they
+-	// know they are not rendering to actual attachments, making this internal tile memory
+-	// allocation even more wasteful, occasionally to the point of triggering OOM crashes.
+-	// On the other hand, if the framebuffer has no attachments and has zero extent,
+-	// we just set the render target extent to cover the render area.
+-	VkExtent2D fbExtent = getFramebufferExtent();
+-	VkExtent2D raFullExtent = { _renderArea.offset.x + _renderArea.extent.width, _renderArea.offset.y + _renderArea.extent.height };
+-    mtlRPDesc.renderTargetWidth = max(min(raFullExtent.width, (fbExtent.width ? fbExtent.width : raFullExtent.width)), 1u);
+-    mtlRPDesc.renderTargetHeight = max(min(raFullExtent.height, (fbExtent.height ? fbExtent.height : raFullExtent.height)), 1u);
++    mtlRPDesc.renderTargetWidth = _renderArea.offset.x + _renderArea.extent.width;
++    mtlRPDesc.renderTargetHeight = _renderArea.offset.y + _renderArea.extent.height;
+     if (_canUseLayeredRendering) {
+         uint32_t renderTargetArrayLength;
+         bool found3D = false, found2D = false;
+-- 
+2.54.0 (Apple Git-157)
+
